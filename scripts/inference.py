@@ -76,7 +76,7 @@ def main(args):
             frame_list = read_imgs(input_img_list)
         else:
             print("extracting landmarks...time consuming")
-            coord_list, frame_list = get_landmark_and_bbox(input_img_list, bbox_shift)
+            coord_list, frame_list, bbox_shift_text, bbox_range = get_landmark_and_bbox(input_img_list, bbox_shift)
             with open(crop_coord_save_path, 'wb') as f:
                 pickle.dump(coord_list, f)
                 

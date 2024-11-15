@@ -3,7 +3,6 @@ import time
 import pdb
 import re
 import gc
-
 import gradio as gr
 import spaces
 import numpy as np
@@ -29,17 +28,21 @@ import gdown
 import imageio
 import ffmpeg
 from moviepy.editor import *
+from fastapi import FastAPI, File, UploadFile
+from fastapi.responses import PlainTextResponse,JSONResponse,FileResponse
+
+import uvicorn
+
+app = FastAPI()
 
 ProjectDir = os.path.abspath(os.path.dirname(__file__))
 CheckpointsDir = os.path.join(ProjectDir, "models")
-
 
 def print_directory_contents(path):
     for child in os.listdir(path):
         child_path = os.path.join(path, child)
         if os.path.isdir(child_path):
             print(child_path)
-
 
 def download_model():
     if not os.path.exists(CheckpointsDir):
@@ -56,19 +59,19 @@ def download_model():
         os.makedirs(f"{CheckpointsDir}/sd-vae-ft-mse/")
         snapshot_download(
             repo_id="stabilityai/sd-vae-ft-mse",
-            local_dir=CheckpointsDir + '/sd-vae-ft-mse',
+            local_dir=CheckpointsDir+'/sd-vae-ft-mse',
             max_workers=8,
             local_dir_use_symlinks=True,
         )
-        # dwpose
+        #dwpose
         os.makedirs(f"{CheckpointsDir}/dwpose/")
         snapshot_download(
             repo_id="yzd-v/DWPose",
-            local_dir=CheckpointsDir + '/dwpose',
+            local_dir=CheckpointsDir+'/dwpose',
             max_workers=8,
             local_dir_use_symlinks=True,
         )
-        # vae
+        #vae
         url = "https://openaipublic.azureedge.net/main/whisper/models/65147644a518d12f04e32d6f3b26facc3f8dd46e5390956a9424a650c0ce22b9/tiny.pt"
         response = requests.get(url)
         # 确保请求成功
@@ -81,12 +84,12 @@ def download_model():
                 f.write(response.content)
         else:
             print(f"请求失败，状态码：{response.status_code}")
-        # gdown face parse
+        #gdown face parse
         url = "https://drive.google.com/uc?id=154JgKpzCPW82qINcVieuPH3fZ2e0P812"
         os.makedirs(f"{CheckpointsDir}/face-parse-bisent/")
         file_path = f"{CheckpointsDir}/face-parse-bisent/79999_iter.pth"
         gdown.download(url, file_path, quiet=False)
-        # resnet
+        #resnet
         url = "https://download.pytorch.org/models/resnet18-5c106cde.pth"
         response = requests.get(url)
         # 确保请求成功
@@ -99,41 +102,45 @@ def download_model():
         else:
             print(f"请求失败，状态码：{response.status_code}")
 
+
         toc = time.time()
 
-        print(f"download cost {toc - tic} seconds")
+        print(f"download cost {toc-tic} seconds")
         print_directory_contents(CheckpointsDir)
 
     else:
         print("Already download the model.")
 
-
 download_model()  # for huggingface deployment.
 
+from musetalk.utils.utils import get_file_type,get_video_fps,datagen
+from musetalk.utils.blending import get_image
+from musetalk.utils.utils import load_all_model
 
+
+#@spaces.GPU(duration=600)
 @torch.no_grad()
-def inference(audio_path, video_path, bbox_shift, output):
-    print(audio_path, video_path, bbox_shift)
-    args_dict = {"result_dir": './results/output', "fps": 25, "batch_size": 16, "output_vid_name": '',
-                 "use_saved_coord": True}  # same with inferenece script
+def inference(audio_path,video_path,bbox_shift,progress=gr.Progress(track_tqdm=True)):
+    args_dict={"result_dir":'./results/output', "fps":25, "batch_size":16, "output_vid_name":'', "use_saved_coord":True}#same with inferenece script
     args = Namespace(**args_dict)
 
     max_workers = 16
 
     input_basename = os.path.basename(video_path).split('.')[0]
-    audio_basename = os.path.basename(audio_path).split('.')[0]
+    audio_basename  = os.path.basename(audio_path).split('.')[0]
     output_basename = f"{input_basename}_{audio_basename}"
-    result_img_save_path = os.path.join(args.result_dir, output_basename)  # related to video & audio inputs
-    crop_coord_save_path = os.path.join(result_img_save_path, input_basename + ".pkl")  # only related to video input
+    result_img_save_path = os.path.join(args.result_dir, output_basename) # related to video & audio inputs
+    crop_coord_save_path = os.path.join(result_img_save_path, input_basename+".pkl") # only related to video input
     bbox_cache_save_path = crop_coord_save_path.replace('.pkl', '_bbox_cache.pkl')
-    os.makedirs(result_img_save_path, exist_ok=True)
 
-    if args.output_vid_name == "":
-        output_vid_name = output
+    os.makedirs(result_img_save_path,exist_ok =True)
+
+    if args.output_vid_name=="":
+        output_vid_name = os.path.join(args.result_dir, output_basename+".mp4")
     else:
         output_vid_name = os.path.join(args.result_dir, args.output_vid_name)
     ############################################## extract frames from source video ##############################################
-    if get_file_type(video_path) == "video":
+    if get_file_type(video_path)=="video":
         save_dir_full = os.path.join(args.result_dir, input_basename)
         # os.makedirs(save_dir_full,exist_ok = True)
         # cmd = f"ffmpeg -v fatal -i {video_path} -start_number 0 {save_dir_full}/%08d.png"
@@ -153,14 +160,14 @@ def inference(audio_path, video_path, bbox_shift, output):
 
         input_img_list = sorted(glob.glob(os.path.join(save_dir_full, '*.[jpJP][pnPN]*[gG]')))
         fps = get_video_fps(video_path)
-    else:  # input img folder
+    else: # input img folder
         input_img_list = glob.glob(os.path.join(video_path, '*.[jpJP][pnPN]*[gG]'))
         input_img_list = sorted(input_img_list, key=lambda x: int(os.path.splitext(os.path.basename(x))[0]))
         fps = args.fps
-    # print(input_img_list)
+    #print(input_img_list)
     ############################################## extract audio feature ##############################################
     whisper_feature = audio_processor.audio2feat(audio_path)
-    whisper_chunks = audio_processor.feature2chunks(feature_array=whisper_feature, fps=fps)
+    whisper_chunks = audio_processor.feature2chunks(feature_array=whisper_feature,fps=fps)
     ############################################## preprocess input image  ##############################################
     is_landmark_and_bbox = True
 
@@ -182,13 +189,13 @@ def inference(audio_path, video_path, bbox_shift, output):
             is_landmark_and_bbox = False
         else:
             print("bbox_cache not found. Recomputing bbox_shift_text and bbox_range...")
-            
+
             is_landmark_and_bbox = True
 
     if is_landmark_and_bbox:
         print("extracting landmarks...time consuming")
 
-        coord_list, frame_list, bbox_shift_text, bbox_range = get_landmark_and_bbox(input_img_list, bbox_shift)
+        coord_list, frame_list, bbox_shift_text, bbox_range = get_landmark_and_bbox(input_img_list, bbox_shift, 2)
 
         with open(crop_coord_save_path, 'wb') as f:
             pickle.dump(coord_list, f)
@@ -204,10 +211,10 @@ def inference(audio_path, video_path, bbox_shift, output):
     for bbox, frame in zip(coord_list, frame_list):
         if bbox == coord_placeholder:
             continue
-        
+
         x1, y1, x2, y2 = bbox
         crop_frame = frame[y1:y2, x1:x2]
-        crop_frame = cv2.resize(crop_frame, (256, 256), interpolation=cv2.INTER_LANCZOS4)
+        crop_frame = cv2.resize(crop_frame,(256,256),interpolation = cv2.INTER_LANCZOS4)
         latents = vae.get_latents_for_unet(crop_frame)
         input_latent_list.append(latents)
 
@@ -217,21 +224,23 @@ def inference(audio_path, video_path, bbox_shift, output):
     input_latent_list_cycle = input_latent_list + input_latent_list[::-1]
     ############################################## inference batch by batch ##############################################
     print("start inference")
+
     video_num = len(whisper_chunks)
     batch_size = args.batch_size
-    gen = datagen(whisper_chunks, input_latent_list_cycle, batch_size)
+    gen = datagen(whisper_chunks,input_latent_list_cycle,batch_size)
     res_frame_list = []
-    for i, (whisper_batch, latent_batch) in enumerate(tqdm(gen, total=int(np.ceil(float(video_num) / batch_size)))):
 
+    for i, (whisper_batch,latent_batch) in enumerate(tqdm(gen,total=int(np.ceil(float(video_num)/batch_size)))):
         tensor_list = [torch.FloatTensor(arr) for arr in whisper_batch]
-        audio_feature_batch = torch.stack(tensor_list).to(unet.device)  # torch, B, 5*N,384
+        audio_feature_batch = torch.stack(tensor_list).to(unet.device) # torch, B, 5*N,384
         audio_feature_batch = pe(audio_feature_batch)
-
+        
         pred_latents = unet.model(latent_batch, timesteps, encoder_hidden_states=audio_feature_batch).sample
         recon = vae.decode_latents(pred_latents)
+
         for res_frame in recon:
             res_frame_list.append(res_frame)
-
+            
     ############################################## pad to full image ##############################################
     # print("pad talking image to original video")
 
@@ -272,7 +281,7 @@ def inference(audio_path, video_path, bbox_shift, output):
     for file in files:
         filename = os.path.join(result_img_save_path, file)
         images.append(imageio.imread(filename))
-
+        
     # 保存视频
     imageio.mimwrite(output_video, images, 'FFMPEG', fps=fps, codec='libx264', pixelformat='yuv420p')
 
@@ -286,7 +295,7 @@ def inference(audio_path, video_path, bbox_shift, output):
         raise FileNotFoundError(f"Input video file not found: {input_video}")
     if not os.path.exists(audio_path):
         raise FileNotFoundError(f"Audio file not found: {audio_path}")
-
+    
     # 读取视频
     reader = imageio.get_reader(input_video)
     fps = reader.get_meta_data()['fps']  # 获取原视频的帧率
@@ -296,11 +305,11 @@ def inference(audio_path, video_path, bbox_shift, output):
 
     # 保存视频并添加音频
     # imageio.mimwrite(output_vid_name, frames, 'FFMPEG', fps=fps, codec='libx264', audio_codec='aac', input_params=['-i', audio_path])
-
+    
     # input_video = ffmpeg.input(input_video)
-
+    
     # input_audio = ffmpeg.input(audio_path)
-
+    
     print(len(frames))
 
     # imageio.mimwrite(
@@ -328,11 +337,12 @@ def inference(audio_path, video_path, bbox_shift, output):
     video_clip = video_clip.set_audio(audio_clip)
 
     # Write the output video
-    video_clip.write_videofile(output_vid_name, codec='libx264', audio_codec='aac', fps=25)
+    video_clip.write_videofile(output_vid_name, codec='libx264', audio_codec='aac',fps=25)
 
-    # shutil.rmtree(result_img_save_path)
+    #shutil.rmtree(result_img_save_path)
     print(f"result is save to {output_vid_name}")
-    return output_vid_name, bbox_shift_text,bbox_range
+    return output_vid_name,bbox_shift_text,bbox_range
+
 def clear_memory():
     """
     清理PyTorch的显存和系统内存缓存。
@@ -341,16 +351,22 @@ def clear_memory():
     gc.collect()  # 触发Python垃圾回收
     torch.cuda.empty_cache()  # 清理PyTorch的显存缓存
     torch.cuda.ipc_collect()  # 清理PyTorch的跨进程通信缓存
-
     # 2. 打印显存使用情况（可选）
     print(f"Memory allocated: {torch.cuda.memory_allocated() / (1024 ** 2):.2f} MB")
     print(f"Max memory allocated: {torch.cuda.max_memory_allocated() / (1024 ** 2):.2f} MB")
     print(f"Cached memory: {torch.cuda.memory_reserved() / (1024 ** 2):.2f} MB")
     print(f"Max cached memory: {torch.cuda.max_memory_reserved() / (1024 ** 2):.2f} MB")
 
+# load model weights
+# audio_processor,vae,unet,pe  = load_all_model()
+# device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+# timesteps = torch.tensor([0], device=device)
+#device = torch.device("cuda:1" if torch.cuda.is_available() else "cpu")
+#timesteps = torch.tensor([1], device=device)
+
 def check_video(video):
     if not isinstance(video, str):
-        return video  # in case of none type
+        return video # in case of none type
     # Define the output video file name
     dir_path, file_name = os.path.split(video)
     if file_name.startswith("outputxxx_"):
@@ -358,9 +374,9 @@ def check_video(video):
     # Add the output prefix to the file name
     output_file_name = "outputxxx_" + file_name
 
-    os.makedirs('./results', exist_ok=True)
-    os.makedirs('./results/output', exist_ok=True)
-    os.makedirs('./results/input', exist_ok=True)
+    os.makedirs('./results',exist_ok=True)
+    os.makedirs('./results/output',exist_ok=True)
+    os.makedirs('./results/input',exist_ok=True)
 
     # Combine the directory path and the new file name
     output_video = os.path.join('./results/input', output_file_name)
@@ -379,21 +395,54 @@ def check_video(video):
     imageio.mimwrite(output_video, frames, 'FFMPEG', fps=25, codec='libx264', quality=9, pixelformat='yuv420p')
     return output_video
 
+@app.get("/test")
+async def test():
+    return PlainTextResponse('success')
+
+@app.get("/do")
+async def do(audio:str,video:str,bbox:int=0):
+    out=inference(audio,video,bbox)
+    print(out)
+    relative_path=out[0]
+    absolute_path = os.path.abspath(relative_path)
+    print(relative_path,absolute_path)
+    return PlainTextResponse(absolute_path)
+
+@app.post('/do')
+async def do(audio:UploadFile = File(...),video:UploadFile = File(...),bbox:int=0):
+    audio_path = f"results/input/{audio.filename}"
+    video_path = f"results/input/{video.filename}"
+    
+    print(f"start save audio{audio_path}")
+    with open(audio_path, "wb") as f:
+        f.write(await audio.read())
+        
+    print(f"start save video{video_path}")
+    with open(video_path, "wb") as f:
+        f.write(await video.read())
+
+    print(f"start inference")
+    out=inference(audio_path,video_path,bbox)
+    print(out)
+    relative_path=out[0]
+    range=out[2]
+    json={"name":os.path.basename(relative_path),"range":range}
+    clear_memory()
+    return JSONResponse(json)
+
+@app.get('/download')
+async def download(name:str):
+    return FileResponse(path=f'results/output/{name}', filename=name, media_type='application/octet-stream')
+
+global audio_processor, vae, unet, pe
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--audio", type=str, default="C:/Users/WDD/Music/cxk.wav")
-    parser.add_argument("--video", type=str, default="C:/Users/WDD/Music/cxk.mp4")
-    parser.add_argument("--output", type=str, default="C:/Users/WDD/Music/cxk_cxk.mp4")
-    parser.add_argument("--bbox_shift", type=int, default=0)
+    parser.add_argument("--port", type=int, default=7862)
     parser.add_argument("--cuda", type=int, default=0)
     args = parser.parse_args()
 
     try:
-        from musetalk.utils.utils import get_file_type, get_video_fps, datagen
-        from musetalk.utils.blending import get_image
-        from musetalk.utils.utils import load_all_model
-        
         audio_processor, vae, unet, pe = load_all_model(args)
         os.environ['cuda'] = f"cuda:{args.cuda}"
         torch.cuda.set_device(args.cuda)
@@ -404,12 +453,8 @@ if __name__ == "__main__":
 
         print(device)
         timesteps = torch.tensor([args.cuda], device=device)
-        out=inference(args.audio,args.video,args.bbox_shift,args.output)
-        print(out)
-        range=out[2]
-        sname, sext = os.path.splitext(args.output)
-        with open(f'{sname}.txt', 'w') as file:
-            file.write(str(range))
+        #uvicorn.run(app="api:app", host="0.0.0.0", port=7862, workers=1,reload=True)
+        uvicorn.run(app=app, host="0.0.0.0", port=args.port, workers=1)
     except Exception as e:
         print(e)
         exit(0)

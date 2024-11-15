@@ -1,29 +1,39 @@
 import sys
-from face_detection import FaceAlignment,LandmarksType
-from os import listdir, path
 import subprocess
 import numpy as np
+import imageio
 import cv2
 import pickle
 import os
 import json
+import torch
+
+from face_detection import FaceAlignment,LandmarksType
+from os import listdir, path
 from mmpose.apis import inference_topdown, init_model
 from mmpose.structures import merge_data_samples
-import torch
 from tqdm import tqdm
+from concurrent.futures import ThreadPoolExecutor
 
 # initialize the mmpose model
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-config_file = './musetalk/utils/dwpose/rtmpose-l_8xb32-270e_coco-ubody-wholebody-384x288.py'
-checkpoint_file = './models/dwpose/dw-ll_ucoco_384.pth'
+cuda=os.getenv('cuda', "cuda")
+device = torch.device(cuda if torch.cuda.is_available() else "cpu")
+ProjectDir = os.path.dirname(os.path.dirname(os.path.abspath(os.path.dirname(__file__))))
+config_file = f'{ProjectDir}/musetalk/utils/dwpose/rtmpose-l_8xb32-270e_coco-ubody-wholebody-384x288.py'
+checkpoint_file = f'{ProjectDir}/models/dwpose/dw-ll_ucoco_384.pth'
 model = init_model(config_file, checkpoint_file, device=device)
 
 # initialize the face detection model
-device = "cuda" if torch.cuda.is_available() else "cpu"
-fa = FaceAlignment(LandmarksType._2D, flip_input=False,device=device)
+device_str = cuda if torch.cuda.is_available() else "cpu"
+fa = FaceAlignment(LandmarksType._2D, flip_input=False,device=device_str)
 
 # maker if the bbox is not sufficient 
 coord_placeholder = (0.0,0.0,0.0,0.0)
+# 定义一个函数进行显存清理
+def clear_cuda_cache():
+    if device.type == 'cuda':
+        torch.cuda.empty_cache()
+        print("CUDA cache cleared!")
 
 def resize_landmark(landmark, w, h, new_w, new_h):
     w_ratio = new_w / w
@@ -40,8 +50,22 @@ def read_imgs(img_list):
         frames.append(frame)
     return frames
 
+def read_img(img_path):
+    return cv2.imread(img_path)
+
+def read_imgs_parallel(img_list, max_workers=8):
+    print('正在并行读取图像...')
+
+    frames = []
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        # executor.map 保证顺序一致
+        results = list(tqdm(executor.map(read_img, img_list), total=len(img_list)))
+        frames.extend(results)
+
+    return frames
+
 def get_bbox_range(img_list,upperbondrange =0):
-    frames = read_imgs(img_list)
+    frames = read_imgs_parallel(img_list)
     batch_size_fa = 1
     batches = [frames[i:i + batch_size_fa] for i in range(0, len(frames), batch_size_fa)]
     coords_list = []
@@ -77,13 +101,13 @@ def get_bbox_range(img_list,upperbondrange =0):
             if upperbondrange != 0:
                 half_face_coord[1] = upperbondrange+half_face_coord[1] #手动调整  + 向下（偏29）  - 向上（偏28）
 
-    text_range=f"Total frame:「{len(frames)}」 Manually adjust range : [ -{int(sum(average_range_minus) / len(average_range_minus))}~{int(sum(average_range_plus) / len(average_range_plus))} ] , the current value: {upperbondrange}"
-    return text_range
-    
+    clear_cuda_cache()
 
-def get_landmark_and_bbox(img_list,upperbondrange =0):
-    frames = read_imgs(img_list)
-    batch_size_fa = 1
+    text_range=f"Total frame:「{len(frames)}」 Manually adjust range : [ -{int(sum(average_range_minus) / len(average_range_minus))}~{int(sum(average_range_plus) / len(average_range_plus))} ] , the current value: {upperbondrange}"
+    return text_range,[-int(sum(average_range_minus) / len(average_range_minus)),int(sum(average_range_plus) / len(average_range_plus))]
+    
+def get_landmark_and_bbox(img_list, upperbondrange = 0, batch_size_fa = 1):
+    frames = read_imgs_parallel(img_list)
     batches = [frames[i:i + batch_size_fa] for i in range(0, len(frames), batch_size_fa)]
     coords_list = []
     landmarks = []
@@ -91,6 +115,7 @@ def get_landmark_and_bbox(img_list,upperbondrange =0):
         print('get key_landmark and face bounding boxes with the bbox_shift:',upperbondrange)
     else:
         print('get key_landmark and face bounding boxes with the default value')
+
     average_range_minus = []
     average_range_plus = []
     for fb in tqdm(batches):
@@ -130,16 +155,21 @@ def get_landmark_and_bbox(img_list,upperbondrange =0):
             else:
                 coords_list += [f_landmark]
     
-    print("********************************************bbox_shift parameter adjustment**********************************************************")
-    print(f"Total frame:「{len(frames)}」 Manually adjust range : [ -{int(sum(average_range_minus) / len(average_range_minus))}~{int(sum(average_range_plus) / len(average_range_plus))} ] , the current value: {upperbondrange}")
-    print("*************************************************************************************************************************************")
-    return coords_list,frames
-    
+    clear_cuda_cache()
 
+    bbox_shift_text = f"Total frame:「{len(frames)}」 Manually adjust range : [ -{int(sum(average_range_minus) / len(average_range_minus))}~{int(sum(average_range_plus) / len(average_range_plus))} ] , the current value: {upperbondrange}"
+    bbox_range = [-int(sum(average_range_minus) / len(average_range_minus)),int(sum(average_range_plus) / len(average_range_plus))]
+
+    print("*********************************bbox_shift parameter adjustment***********************************************")
+    print(bbox_shift_text)
+    print("***************************************************************************************************************")
+    
+    return coords_list, frames, bbox_shift_text, bbox_range
+    
 if __name__ == "__main__":
     img_list = ["./results/lyria/00000.png","./results/lyria/00001.png","./results/lyria/00002.png","./results/lyria/00003.png"]
     crop_coord_path = "./coord_face.pkl"
-    coords_list,full_frames = get_landmark_and_bbox(img_list)
+    coords_list, full_frames, bbox_shift_text, bbox_range = get_landmark_and_bbox(img_list)
     with open(crop_coord_path, 'wb') as f:
         pickle.dump(coords_list, f)
         
