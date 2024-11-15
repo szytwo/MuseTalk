@@ -149,10 +149,9 @@ def inference(audio_path, video_path, bbox_shift, output):
         #for i, im in enumerate(tqdm(reader, total=num_frames)):
         #    imageio.imwrite(f"{save_dir_full}/{i:08d}.png", im)
 
-        video_to_img_parallel(video_path, save_dir_full, max_workers)
+        _, fps = video_to_img_parallel(video_path, save_dir_full, 10, max_workers)
 
         input_img_list = sorted(glob.glob(os.path.join(save_dir_full, '*.[jpJP][pnPN]*[gG]')))
-        fps = get_video_fps(video_path)
     else:  # input img folder
         input_img_list = glob.glob(os.path.join(video_path, '*.[jpJP][pnPN]*[gG]'))
         input_img_list = sorted(input_img_list, key=lambda x: int(os.path.splitext(os.path.basename(x))[0]))
@@ -216,7 +215,7 @@ def inference(audio_path, video_path, bbox_shift, output):
     coord_list_cycle = coord_list + coord_list[::-1]
     input_latent_list_cycle = input_latent_list + input_latent_list[::-1]
     ############################################## inference batch by batch ##############################################
-    print("start inference")
+    print("开始推理")
     video_num = len(whisper_chunks)
     batch_size = args.batch_size
     gen = datagen(whisper_chunks, input_latent_list_cycle, batch_size)
@@ -258,7 +257,7 @@ def inference(audio_path, video_path, bbox_shift, output):
     fps = 25
     # 图片路径
     # 输出视频路径
-    output_video = 'temp.mp4'
+    output_video = os.path.join(args.result_dir, output_basename + "_temp.mp4")
 
     # 读取图片
     def is_valid_image(file):
@@ -280,7 +279,7 @@ def inference(audio_path, video_path, bbox_shift, output):
     # print(cmd_combine_audio)
     # os.system(cmd_combine_audio)
 
-    input_video = './temp.mp4'
+    input_video = output_video
     # Check if the input_video and audio_path exist
     if not os.path.exists(input_video):
         raise FileNotFoundError(f"Input video file not found: {input_video}")
@@ -332,7 +331,9 @@ def inference(audio_path, video_path, bbox_shift, output):
 
     # shutil.rmtree(result_img_save_path)
     print(f"result is save to {output_vid_name}")
+
     return output_vid_name, bbox_shift_text,bbox_range
+
 def clear_memory():
     """
     清理PyTorch的显存和系统内存缓存。
