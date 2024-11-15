@@ -129,8 +129,8 @@ def inference(audio_path, video_path, bbox_shift, progress=gr.Progress(track_tqd
     audio_basename  = os.path.basename(audio_path).split('.')[0]
     output_basename = f"{input_basename}_{audio_basename}"
     result_img_save_path = os.path.join(args.result_dir, output_basename) # related to video & audio inputs
-    crop_coord_save_path = os.path.join(result_img_save_path, input_basename + ".pkl") # only related to video input
-    bbox_cache_save_path = crop_coord_save_path.replace('.pkl', f'_{bbox_shift}_bbox_cache.pkl')
+    crop_coord_save_path = os.path.join(args.result_dir, f"{input_basename}/crop_coord_cache_{bbox_shift}.pkl") # only related to video input
+    bbox_cache_save_path = os.path.join(args.result_dir, f"{input_basename}/bbox_cache_{bbox_shift}.pkl")
 
     os.makedirs(result_img_save_path,exist_ok =True)
 
@@ -155,7 +155,11 @@ def inference(audio_path, video_path, bbox_shift, progress=gr.Progress(track_tqd
         #for i, im in enumerate(tqdm(reader, total=num_frames)):
         #    imageio.imwrite(f"{save_dir_full}/{i:08d}.png", im)
 
-        _, fps = video_to_img_parallel(video_path, save_dir_full, 10, max_workers)
+        if os.path.exists(save_dir_full) and args.use_saved_coord:
+            print(f"使用视频图像缓存{save_dir_full}")
+            fps = get_video_fps(video_path)
+        else:
+            _, fps = video_to_img_parallel(video_path, save_dir_full, 10, max_workers)
 
         input_img_list = sorted(glob.glob(os.path.join(save_dir_full, '*.[jpJP][pnPN]*[gG]')))
     else: # input img folder
@@ -172,7 +176,7 @@ def inference(audio_path, video_path, bbox_shift, progress=gr.Progress(track_tqd
     if os.path.exists(crop_coord_save_path) and args.use_saved_coord:
         # 加载缓存的 bbox 数据（包括 bbox_shift_text 和 bbox_range）
         if os.path.exists(bbox_cache_save_path):
-            print("using extracted coordinates")
+            print(f"使用口型坐标缓存{bbox_cache_save_path}")
 
             with open(crop_coord_save_path,'rb') as f:
                 coord_list = pickle.load(f)
@@ -186,12 +190,10 @@ def inference(audio_path, video_path, bbox_shift, progress=gr.Progress(track_tqd
 
             is_landmark_and_bbox = False
         else:
-            print("bbox_cache not found. Recomputing bbox_shift_text and bbox_range...")
-
             is_landmark_and_bbox = True
 
     if is_landmark_and_bbox:
-        print("extracting landmarks...time consuming")
+        print("正在提取口型坐标（耗时）...")
 
         coord_list, frame_list, bbox_shift_text, bbox_range = get_landmark_and_bbox(input_img_list, bbox_shift, 2)
 
@@ -221,7 +223,7 @@ def inference(audio_path, video_path, bbox_shift, progress=gr.Progress(track_tqd
     coord_list_cycle = coord_list + coord_list[::-1]
     input_latent_list_cycle = input_latent_list + input_latent_list[::-1]
     ############################################## inference batch by batch ##############################################
-    print("开始推理")
+    print("开始推理口型（耗时）...")
 
     video_num = len(whisper_chunks)
     batch_size = args.batch_size
@@ -267,27 +269,29 @@ def inference(audio_path, video_path, bbox_shift, progress=gr.Progress(track_tqd
     # 输出视频路径
     output_video = os.path.join(args.result_dir, output_basename + "_temp.mp4")
 
-    # 读取图片
-    def is_valid_image(file):
-        pattern = re.compile(r'\d{8}\.png')
-        return pattern.match(file)
+    # # 读取图片
+    # def is_valid_image(file):
+    #     pattern = re.compile(r'\d{8}\.png')
+    #     return pattern.match(file)
 
-    images = []
-    files = [file for file in os.listdir(result_img_save_path) if is_valid_image(file)]
-    files.sort(key=lambda x: int(x.split('.')[0]))
+    # images = []
+    # files = [file for file in os.listdir(result_img_save_path) if is_valid_image(file)]
+    # files.sort(key=lambda x: int(x.split('.')[0]))
 
-    for file in files:
-        filename = os.path.join(result_img_save_path, file)
-        images.append(imageio.imread(filename))
+    # for file in files:
+    #     filename = os.path.join(result_img_save_path, file)
+    #     images.append(imageio.imread(filename))
         
-    # 保存视频
-    imageio.mimwrite(output_video, images, 'FFMPEG', fps=fps, codec='libx264', pixelformat='yuv420p')
-
+    # # 保存视频
+    # imageio.mimwrite(output_video, images, 'FFMPEG', fps=fps, codec='libx264', pixelformat='yuv420p')
+    
+    input_video, frames = write_video(result_img_save_path, output_video, fps, max_workers)
+    
     # cmd_combine_audio = f"ffmpeg -y -v fatal -i {audio_path} -i temp.mp4 {output_vid_name}"
     # print(cmd_combine_audio)
     # os.system(cmd_combine_audio)
 
-    input_video = output_video
+    # input_video = output_video
     # Check if the input_video and audio_path exist
     if not os.path.exists(input_video):
         raise FileNotFoundError(f"Input video file not found: {input_video}")
@@ -299,7 +303,7 @@ def inference(audio_path, video_path, bbox_shift, progress=gr.Progress(track_tqd
     fps = reader.get_meta_data()['fps']  # 获取原视频的帧率
 
     # 将帧存储在列表中
-    frames = images
+    # frames = images
 
     # 保存视频并添加音频
     # imageio.mimwrite(output_vid_name, frames, 'FFMPEG', fps=fps, codec='libx264', audio_codec='aac', input_params=['-i', audio_path])
@@ -308,7 +312,7 @@ def inference(audio_path, video_path, bbox_shift, progress=gr.Progress(track_tqd
     
     # input_audio = ffmpeg.input(audio_path)
     
-    print(len(frames))
+    # print(len(frames))
 
     # imageio.mimwrite(
     #     output_video,
@@ -337,10 +341,12 @@ def inference(audio_path, video_path, bbox_shift, progress=gr.Progress(track_tqd
     # Write the output video
     video_clip.write_videofile(output_vid_name, codec='libx264', audio_codec='aac',fps=25)
 
-    #shutil.rmtree(result_img_save_path)
+    # 删除文件夹
+    shutil.rmtree(result_img_save_path)
+
     print(f"result is save to {output_vid_name}")
 
-    return output_vid_name,bbox_shift_text,bbox_range
+    return output_vid_name, bbox_shift_text, bbox_range
 
 def clear_memory():
     """
@@ -448,7 +454,7 @@ if __name__ == "__main__":
         device = torch.device(f"cuda:{args.cuda}" if torch.cuda.is_available() else "cpu")
 
         from musetalk.utils.preprocessing import get_landmark_and_bbox, read_imgs_parallel, coord_placeholder
-        from musetalk.utils.parallel_method import video_to_img_parallel, frames_in_parallel
+        from musetalk.utils.parallel_method import video_to_img_parallel, frames_in_parallel, write_video
 
         print(device)
         timesteps = torch.tensor([args.cuda], device=device)

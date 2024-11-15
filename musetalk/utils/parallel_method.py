@@ -1,8 +1,10 @@
 import os
+import shutil
 import copy
 import cv2
 import numpy as np
 import imageio
+import re
 
 from tqdm import tqdm
 from concurrent.futures import ThreadPoolExecutor
@@ -77,3 +79,66 @@ def frames_in_parallel(res_frame_list, coord_list_cycle, frame_list_cycle, resul
         # 等待所有任务完成
         for future in futures:
             future.result()
+
+def delete_folder(folder_path):
+    if os.path.exists(folder_path):
+        shutil.rmtree(folder_path)
+        print(f"文件夹 {folder_path} 已被删除。")
+    else:
+        print(f"文件夹 {folder_path} 不存在。")
+
+
+def read_image(image_path):
+    return cv2.imread(image_path)
+
+def write_video(result_img_save_path, output_video, fps=25, max_workers=8):
+    print(f"开始将图像合成视频...")
+    # 检查是否有有效图片
+    def is_valid_image(file):
+        pattern = re.compile(r'\d{8}\.png')
+        return pattern.match(file)
+
+    files = [file for file in os.listdir(result_img_save_path) if is_valid_image(file)]
+    files.sort(key=lambda x: int(x.split('.')[0]))
+
+    if not files:
+        raise ValueError("No valid images found in the specified path.")
+
+    # 获取第一张图片的尺寸
+    first_image_path = os.path.join(result_img_save_path, files[0])
+    frame = cv2.imread(first_image_path)
+    height, width, _ = frame.shape
+
+    # 初始化视频写入器
+    fourcc = cv2.VideoWriter_fourcc(*'mp4v')  # 使用 mp4 编码格式
+    out = cv2.VideoWriter(output_video, fourcc, fps, (width, height))
+    frames = []
+    
+    try:
+        # 并行读取图像并写入视频
+        def process_frame(file):
+            frame_path = os.path.join(result_img_save_path, file)
+            frame = read_image(frame_path)
+            return frame
+
+        print(f"Reading frames...")
+        # 使用 ThreadPoolExecutor 来并行化图像读取
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            # 使用 map 保证顺序一致
+            frames = list(tqdm(executor.map(process_frame, files), total=len(files)))
+
+        print(f"Writing video...")
+        # 将读取到的图像写入视频
+        for frame in tqdm(frames):
+            if frame is not None:
+                out.write(frame)
+            else:
+                print(f"Warning: Frame is None, skipping...")
+    except Exception as e:
+        print(f"发生错误: {e}")
+    finally:
+        # 确保资源释放
+        out.release()
+        print(f"视频保存到 {output_video}")
+    
+    return output_video, frames
