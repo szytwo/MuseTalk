@@ -33,13 +33,11 @@ from moviepy.editor import *
 ProjectDir = os.path.abspath(os.path.dirname(__file__))
 CheckpointsDir = os.path.join(ProjectDir, "models")
 
-
 def print_directory_contents(path):
     for child in os.listdir(path):
         child_path = os.path.join(path, child)
         if os.path.isdir(child_path):
             print(child_path)
-
 
 def download_model():
     if not os.path.exists(CheckpointsDir):
@@ -107,9 +105,7 @@ def download_model():
     else:
         print("Already download the model.")
 
-
 download_model()  # for huggingface deployment.
-
 
 @torch.no_grad()
 def inference(audio_path, video_path, bbox_shift, output):
@@ -125,7 +121,8 @@ def inference(audio_path, video_path, bbox_shift, output):
     output_basename = f"{input_basename}_{audio_basename}"
     result_img_save_path = os.path.join(args.result_dir, output_basename)  # related to video & audio inputs
     crop_coord_save_path = os.path.join(result_img_save_path, input_basename + ".pkl")  # only related to video input
-    bbox_cache_save_path = crop_coord_save_path.replace('.pkl', '_bbox_cache.pkl')
+    bbox_cache_save_path = crop_coord_save_path.replace('.pkl', f'_{bbox_shift}_bbox_cache.pkl')
+
     os.makedirs(result_img_save_path, exist_ok=True)
 
     if args.output_vid_name == "":
@@ -405,7 +402,7 @@ if __name__ == "__main__":
 
         print(device)
         timesteps = torch.tensor([args.cuda], device=device)
-        out=inference(args.audio,args.video,args.bbox_shift,args.output)
+        out=inference(args.audio, args.video, args.bbox_shift, args.output)
         print(out)
         range=out[2]
         sname, sext = os.path.splitext(args.output)

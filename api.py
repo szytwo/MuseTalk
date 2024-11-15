@@ -117,10 +117,9 @@ from musetalk.utils.utils import get_file_type,get_video_fps,datagen
 from musetalk.utils.blending import get_image
 from musetalk.utils.utils import load_all_model
 
-
 #@spaces.GPU(duration=600)
 @torch.no_grad()
-def inference(audio_path,video_path,bbox_shift,progress=gr.Progress(track_tqdm=True)):
+def inference(audio_path, video_path, bbox_shift, progress=gr.Progress(track_tqdm=True)):
     args_dict={"result_dir":'./results/output', "fps":25, "batch_size":16, "output_vid_name":'', "use_saved_coord":True}#same with inferenece script
     args = Namespace(**args_dict)
 
@@ -130,8 +129,8 @@ def inference(audio_path,video_path,bbox_shift,progress=gr.Progress(track_tqdm=T
     audio_basename  = os.path.basename(audio_path).split('.')[0]
     output_basename = f"{input_basename}_{audio_basename}"
     result_img_save_path = os.path.join(args.result_dir, output_basename) # related to video & audio inputs
-    crop_coord_save_path = os.path.join(result_img_save_path, input_basename+".pkl") # only related to video input
-    bbox_cache_save_path = crop_coord_save_path.replace('.pkl', '_bbox_cache.pkl')
+    crop_coord_save_path = os.path.join(result_img_save_path, input_basename + ".pkl") # only related to video input
+    bbox_cache_save_path = crop_coord_save_path.replace('.pkl', f'_{bbox_shift}_bbox_cache.pkl')
 
     os.makedirs(result_img_save_path,exist_ok =True)
 
@@ -409,7 +408,7 @@ async def do(audio:str,video:str,bbox:int=0):
     return PlainTextResponse(absolute_path)
 
 @app.post('/do')
-async def do(audio:UploadFile = File(...),video:UploadFile = File(...),bbox:int=0):
+async def do(audio:UploadFile = File(...), video:UploadFile = File(...), bbox:int = 0):
     audio_path = f"results/input/{audio.filename}"
     video_path = f"results/input/{video.filename}"
     
@@ -422,7 +421,7 @@ async def do(audio:UploadFile = File(...),video:UploadFile = File(...),bbox:int=
         f.write(await video.read())
 
     print(f"开始执行inference")
-    out=inference(audio_path,video_path,bbox)
+    out=inference(audio_path, video_path, bbox)
     print(out)
     relative_path=out[0]
     range=out[2]
