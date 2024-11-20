@@ -92,7 +92,10 @@ def read_image(image_path):
     return cv2.imread(image_path)
 
 def write_video(result_img_save_path, output_video, fps=25, max_workers=8):
-    print(f"开始将图像合成视频...")
+    print(f"开始将图像合成视频...")    
+    # 检查文件是否存在，若存在则删除
+    if os.path.exists(output_video):
+        os.remove(output_video)
     # 检查是否有有效图片
     def is_valid_image(file):
         pattern = re.compile(r'\d{8}\.png')
@@ -113,7 +116,7 @@ def write_video(result_img_save_path, output_video, fps=25, max_workers=8):
     fourcc = cv2.VideoWriter_fourcc(*'mp4v')  # 使用 mp4 编码格式
     out = cv2.VideoWriter(output_video, fourcc, fps, (width, height))
     frames = []
-    
+
     try:
         # 并行读取图像并写入视频
         def process_frame(file):

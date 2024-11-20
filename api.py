@@ -338,6 +338,10 @@ def inference(audio_path, video_path, bbox_shift, progress=gr.Progress(track_tqd
     # Set the audio to the video
     video_clip = video_clip.set_audio(audio_clip)
 
+    # 检查文件是否存在，若存在则删除
+    if os.path.exists(output_vid_name):
+        os.remove(output_vid_name)
+        
     # Write the output video
     video_clip.write_videofile(output_vid_name, codec='libx264', audio_codec='aac',fps=25)
 
