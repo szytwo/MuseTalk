@@ -159,7 +159,8 @@ def inference(audio_path, video_path, bbox_shift, progress=gr.Progress(track_tqd
             print(f"使用视频图像缓存{save_dir_full}")
             fps = get_video_fps(video_path)
         else:
-            _, fps = video_to_img_parallel(video_path, save_dir_full, 10, max_workers)
+            max_duration = 15
+            _, fps = video_to_img_parallel(video_path, save_dir_full, max_duration, max_workers)
 
         input_img_list = sorted(glob.glob(os.path.join(save_dir_full, '*.[jpJP][pnPN]*[gG]')))
     else: # input img folder
