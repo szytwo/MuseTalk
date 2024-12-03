@@ -115,6 +115,7 @@ def get_landmark_and_bbox(img_list, upperbondrange = 0, batch_size_fa = 1):
         print('get key_landmark and face bounding boxes with the bbox_shift:',upperbondrange)
     else:
         print('get key_landmark and face bounding boxes with the default value')
+
     average_range_minus = []
     average_range_plus = []
     for fb in tqdm(batches):

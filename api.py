@@ -420,8 +420,11 @@ async def do(audio:str,video:str,bbox:int=0):
 
 @app.post('/do')
 async def do(audio:UploadFile = File(...), video:UploadFile = File(...), bbox:int = 0):
-    audio_path = f"results/input/{audio.filename}"
-    video_path = f"results/input/{video.filename}"
+    input_dir="./results/input"
+    os.makedirs(input_dir,exist_ok=True)
+    
+    audio_path = os.path.join(input_dir, audio.filename)
+    video_path = os.path.join(input_dir, video.filename)
     
     print(f"接收上传audio请求{audio_path}")
     with open(audio_path, "wb") as f:
