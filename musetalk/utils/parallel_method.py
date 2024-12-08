@@ -10,6 +10,7 @@ from tqdm import tqdm
 from concurrent.futures import ThreadPoolExecutor
 from musetalk.utils.utils import get_file_type,get_video_fps,datagen
 from musetalk.utils.blending import get_image
+from custom.file_utils import logging
 
 def save_img(image, save_path):
     imageio.imwrite(save_path, image)
@@ -27,7 +28,7 @@ def video_to_img_parallel(video_path, save_dir, max_duration = 10, max_workers =
 
     #save_paths = [os.path.join(save_dir, f"{i:08d}.png") for i in range(total_frames)]
     save_paths = []
-    print(f"开始读取视频的前 {max_duration} 秒 ({total_frames} 帧)...")
+    logging.info(f"开始读取视频的前 {max_duration} 秒 ({total_frames} 帧)...")
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
         futures = []
         for i, frame in enumerate(tqdm(reader, total=total_frames)):
@@ -37,12 +38,12 @@ def video_to_img_parallel(video_path, save_dir, max_duration = 10, max_workers =
             save_paths.append(save_path)
             futures.append(executor.submit(save_img, frame, save_path))
         
-        print("等待所有帧保存完成...")
+        logging.info("等待所有帧保存完成...")
         # 显式等待所有任务完成
         for future in tqdm(futures):
             future.result()
 
-    print(f"所有帧已保存至 {save_dir}")
+    logging.info(f"所有帧已保存至 {save_dir}")
     
     return save_paths, fps
 
@@ -55,7 +56,7 @@ def save_frame(i, combine_frame, result_img_save_path):
     return output_path
 
 def frames_in_parallel(res_frame_list, coord_list_cycle, frame_list_cycle, result_img_save_path, max_workers=8):
-    print("开始将语音图像转换为原始视频图像...")
+    logging.info("开始将语音图像转换为原始视频图像...")
     # 在主函数中提前深拷贝 frame_list_cycle
     frame_list_copy = [copy.deepcopy(frame) for frame in frame_list_cycle]
 
@@ -69,7 +70,7 @@ def frames_in_parallel(res_frame_list, coord_list_cycle, frame_list_cycle, resul
             try:
                 res_frame = cv2.resize(res_frame.astype(np.uint8), (x2 - x1, y2 - y1))
             except Exception as e:
-                print(f"处理帧 {i} 时出错: {e}")
+                logging.info(f"处理帧 {i} 时出错: {e}")
                 continue
             
             combine_frame = get_image(ori_frame, res_frame, bbox)
@@ -83,16 +84,16 @@ def frames_in_parallel(res_frame_list, coord_list_cycle, frame_list_cycle, resul
 def delete_folder(folder_path):
     if os.path.exists(folder_path):
         shutil.rmtree(folder_path)
-        print(f"文件夹 {folder_path} 已被删除。")
+        logging.info(f"文件夹 {folder_path} 已被删除。")
     else:
-        print(f"文件夹 {folder_path} 不存在。")
+        logging.info(f"文件夹 {folder_path} 不存在。")
 
 
 def read_image(image_path):
     return cv2.imread(image_path)
 
 def write_video(result_img_save_path, output_video, fps=25, max_workers=8):
-    print(f"开始将图像合成视频...")    
+    logging.info(f"开始将图像合成视频...")    
     # 检查文件是否存在，若存在则删除
     if os.path.exists(output_video):
         os.remove(output_video)
@@ -124,24 +125,24 @@ def write_video(result_img_save_path, output_video, fps=25, max_workers=8):
             frame = read_image(frame_path)
             return frame
 
-        print(f"Reading frames...")
+        logging.info(f"Reading frames...")
         # 使用 ThreadPoolExecutor 来并行化图像读取
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
             # 使用 map 保证顺序一致
             frames = list(tqdm(executor.map(process_frame, files), total=len(files)))
 
-        print(f"Writing video...")
+        logging.info(f"Writing video...")
         # 将读取到的图像写入视频
         for frame in tqdm(frames):
             if frame is not None:
                 out.write(frame)
             else:
-                print(f"Warning: Frame is None, skipping...")
+                logging.info(f"Warning: Frame is None, skipping...")
     except Exception as e:
-        print(f"发生错误: {e}")
+        logging.info(f"发生错误: {e}")
     finally:
         # 确保资源释放
         out.release()
-        print(f"视频保存到 {output_video}")
+        logging.info(f"视频保存到 {output_video}")
     
     return output_video, frames

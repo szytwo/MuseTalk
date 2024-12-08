@@ -14,6 +14,7 @@ from mmpose.apis import inference_topdown, init_model
 from mmpose.structures import merge_data_samples
 from tqdm import tqdm
 from concurrent.futures import ThreadPoolExecutor
+from custom.file_utils import logging
 
 # initialize the mmpose model
 cuda=os.getenv('cuda', "cuda")
@@ -33,7 +34,7 @@ coord_placeholder = (0.0,0.0,0.0,0.0)
 def clear_cuda_cache():
     if device.type == 'cuda':
         torch.cuda.empty_cache()
-        print("CUDA cache cleared!")
+        logging.info("CUDA cache cleared!")
 
 def resize_landmark(landmark, w, h, new_w, new_h):
     w_ratio = new_w / w
@@ -44,7 +45,7 @@ def resize_landmark(landmark, w, h, new_w, new_h):
 
 def read_imgs(img_list):
     frames = []
-    print('reading images...')
+    logging.info('reading images...')
     for img_path in tqdm(img_list):
         frame = cv2.imread(img_path)
         frames.append(frame)
@@ -54,7 +55,7 @@ def read_img(img_path):
     return cv2.imread(img_path)
 
 def read_imgs_parallel(img_list, max_workers=8):
-    print('正在并行读取图像...')
+    logging.info('正在并行读取图像...')
 
     frames = []
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
@@ -71,9 +72,9 @@ def get_bbox_range(img_list,upperbondrange =0):
     coords_list = []
     landmarks = []
     if upperbondrange != 0:
-        print('get key_landmark and face bounding boxes with the bbox_shift:',upperbondrange)
+        logging.info('get key_landmark and face bounding boxes with the bbox_shift:',upperbondrange)
     else:
-        print('get key_landmark and face bounding boxes with the default value')
+        logging.info('get key_landmark and face bounding boxes with the default value')
     average_range_minus = []
     average_range_plus = []
     for fb in tqdm(batches):
@@ -112,9 +113,9 @@ def get_landmark_and_bbox(img_list, upperbondrange = 0, batch_size_fa = 1):
     coords_list = []
     landmarks = []
     if upperbondrange != 0:
-        print('get key_landmark and face bounding boxes with the bbox_shift:',upperbondrange)
+        logging.info('get key_landmark and face bounding boxes with the bbox_shift:',upperbondrange)
     else:
-        print('get key_landmark and face bounding boxes with the default value')
+        logging.info('get key_landmark and face bounding boxes with the default value')
 
     average_range_minus = []
     average_range_plus = []
@@ -151,7 +152,7 @@ def get_landmark_and_bbox(img_list, upperbondrange = 0, batch_size_fa = 1):
             if y2-y1<=0 or x2-x1<=0 or x1<0: # if the landmark bbox is not suitable, reuse the bbox
                 coords_list += [f]
                 w,h = f[2]-f[0], f[3]-f[1]
-                print("error bbox:",f)
+                logging.info("error bbox:",f)
             else:
                 coords_list += [f_landmark]
     
@@ -160,9 +161,9 @@ def get_landmark_and_bbox(img_list, upperbondrange = 0, batch_size_fa = 1):
     bbox_shift_text = f"Total frame:「{len(frames)}」 Manually adjust range : [ -{int(sum(average_range_minus) / len(average_range_minus))}~{int(sum(average_range_plus) / len(average_range_plus))} ] , the current value: {upperbondrange}"
     bbox_range = [-int(sum(average_range_minus) / len(average_range_minus)),int(sum(average_range_plus) / len(average_range_plus))]
 
-    print("*********************************bbox_shift parameter adjustment***********************************************")
-    print(bbox_shift_text)
-    print("***************************************************************************************************************")
+    logging.info("*********************************bbox_shift parameter adjustment***********************************************")
+    logging.info(bbox_shift_text)
+    logging.info("***************************************************************************************************************")
     
     return coords_list, frames, bbox_shift_text, bbox_range
     
@@ -178,7 +179,7 @@ if __name__ == "__main__":
             continue
         x1, y1, x2, y2 = bbox
         crop_frame = frame[y1:y2, x1:x2]
-        print('Cropped shape', crop_frame.shape)
+        logging.info('Cropped shape', crop_frame.shape)
         
         #cv2.imwrite(path.join(save_dir, '{}.png'.format(i)),full_frames[i][0][y1:y2, x1:x2])
-    print(coords_list)
+    logging.info(coords_list)

@@ -30,6 +30,7 @@ import ffmpeg
 from moviepy.editor import *
 from fastapi import FastAPI, File, UploadFile
 from fastapi.responses import PlainTextResponse,JSONResponse,FileResponse
+from custom.file_utils import logging
 
 import uvicorn
 
@@ -42,12 +43,12 @@ def print_directory_contents(path):
     for child in os.listdir(path):
         child_path = os.path.join(path, child)
         if os.path.isdir(child_path):
-            print(child_path)
+            logging.info(child_path)
 
 def download_model():
     if not os.path.exists(CheckpointsDir):
         os.makedirs(CheckpointsDir)
-        print("Checkpoint Not Downloaded, start downloading...")
+        logging.info("Checkpoint Not Downloaded, start downloading...")
         tic = time.time()
         snapshot_download(
             repo_id="TMElyralab/MuseTalk",
@@ -83,7 +84,7 @@ def download_model():
             with open(file_path, "wb") as f:
                 f.write(response.content)
         else:
-            print(f"请求失败，状态码：{response.status_code}")
+            logging.info(f"请求失败，状态码：{response.status_code}")
         #gdown face parse
         url = "https://drive.google.com/uc?id=154JgKpzCPW82qINcVieuPH3fZ2e0P812"
         os.makedirs(f"{CheckpointsDir}/face-parse-bisent/")
@@ -100,16 +101,16 @@ def download_model():
             with open(file_path, "wb") as f:
                 f.write(response.content)
         else:
-            print(f"请求失败，状态码：{response.status_code}")
+            logging.info(f"请求失败，状态码：{response.status_code}")
 
 
         toc = time.time()
 
-        print(f"download cost {toc-tic} seconds")
+        logging.info(f"download cost {toc-tic} seconds")
         print_directory_contents(CheckpointsDir)
 
     else:
-        print("Already download the model.")
+        logging.info("Already download the model.")
 
 download_model()  # for huggingface deployment.
 
@@ -145,18 +146,18 @@ def inference(audio_path, video_path, bbox_shift, progress=gr.Progress(track_tqd
         # cmd = f"ffmpeg -v fatal -i {video_path} -start_number 0 {save_dir_full}/%08d.png"
         # os.system(cmd)
         # 读取视频
-        #print("start reader video")
+        #logging.info("start reader video")
         
         #reader = imageio.get_reader(video_path)
         #num_frames = reader.count_frames()  # 获取视频总帧数
 
-        #print("start save video image")
+        #logging.info("start save video image")
         # 保存图片
         #for i, im in enumerate(tqdm(reader, total=num_frames)):
         #    imageio.imwrite(f"{save_dir_full}/{i:08d}.png", im)
 
         if os.path.exists(save_dir_full) and args.use_saved_coord:
-            print(f"使用视频图像缓存{save_dir_full}")
+            logging.info(f"使用视频图像缓存{save_dir_full}")
             fps = get_video_fps(video_path)
         else:
             max_duration = 15
@@ -167,7 +168,7 @@ def inference(audio_path, video_path, bbox_shift, progress=gr.Progress(track_tqd
         input_img_list = glob.glob(os.path.join(video_path, '*.[jpJP][pnPN]*[gG]'))
         input_img_list = sorted(input_img_list, key=lambda x: int(os.path.splitext(os.path.basename(x))[0]))
         fps = args.fps
-    #print(input_img_list)
+    #logging.info(input_img_list)
     ############################################## extract audio feature ##############################################
     whisper_feature = audio_processor.audio2feat(audio_path)
     whisper_chunks = audio_processor.feature2chunks(feature_array=whisper_feature,fps=fps)
@@ -177,7 +178,7 @@ def inference(audio_path, video_path, bbox_shift, progress=gr.Progress(track_tqd
     if os.path.exists(crop_coord_save_path) and args.use_saved_coord:
         # 加载缓存的 bbox 数据（包括 bbox_shift_text 和 bbox_range）
         if os.path.exists(bbox_cache_save_path):
-            print(f"使用口型坐标缓存{bbox_cache_save_path}")
+            logging.info(f"使用口型坐标缓存{bbox_cache_save_path}")
 
             with open(crop_coord_save_path,'rb') as f:
                 coord_list = pickle.load(f)
@@ -194,7 +195,7 @@ def inference(audio_path, video_path, bbox_shift, progress=gr.Progress(track_tqd
             is_landmark_and_bbox = True
 
     if is_landmark_and_bbox:
-        print("正在提取口型坐标（耗时）...")
+        logging.info("正在提取口型坐标（耗时）...")
 
         coord_list, frame_list, bbox_shift_text, bbox_range = get_landmark_and_bbox(input_img_list, bbox_shift, 2)
 
@@ -224,7 +225,7 @@ def inference(audio_path, video_path, bbox_shift, progress=gr.Progress(track_tqd
     coord_list_cycle = coord_list + coord_list[::-1]
     input_latent_list_cycle = input_latent_list + input_latent_list[::-1]
     ############################################## inference batch by batch ##############################################
-    print("开始推理口型（耗时）...")
+    logging.info("开始推理口型（耗时）...")
 
     video_num = len(whisper_chunks)
     batch_size = args.batch_size
@@ -243,7 +244,7 @@ def inference(audio_path, video_path, bbox_shift, progress=gr.Progress(track_tqd
             res_frame_list.append(res_frame)
             
     ############################################## pad to full image ##############################################
-    # print("pad talking image to original video")
+    # logging.info("pad talking image to original video")
 
     # for i, res_frame in enumerate(tqdm(res_frame_list)):
     #     bbox = coord_list_cycle[i%(len(coord_list_cycle))]
@@ -253,7 +254,7 @@ def inference(audio_path, video_path, bbox_shift, progress=gr.Progress(track_tqd
     #     try:
     #         res_frame = cv2.resize(res_frame.astype(np.uint8), (x2 - x1, y2 - y1))
     #     except:
-    # #                 print(bbox)
+    # #                 logging.info(bbox)
     #         continue
         
     #     combine_frame = get_image(ori_frame,res_frame,bbox)
@@ -262,7 +263,7 @@ def inference(audio_path, video_path, bbox_shift, progress=gr.Progress(track_tqd
     frames_in_parallel(res_frame_list, coord_list_cycle, frame_list_cycle, result_img_save_path, max_workers)    
 
     # cmd_img2video = f"ffmpeg -y -v fatal -r {fps} -f image2 -i {result_img_save_path}/%08d.png -vcodec libx264 -vf format=rgb24,scale=out_color_matrix=bt709,format=yuv420p temp.mp4"
-    # print(cmd_img2video)
+    # logging.info(cmd_img2video)
     # os.system(cmd_img2video)
     # 帧率
     # fps = 25
@@ -289,7 +290,7 @@ def inference(audio_path, video_path, bbox_shift, progress=gr.Progress(track_tqd
     input_video, frames = write_video(result_img_save_path, output_video, fps, max_workers)
     
     # cmd_combine_audio = f"ffmpeg -y -v fatal -i {audio_path} -i temp.mp4 {output_vid_name}"
-    # print(cmd_combine_audio)
+    # logging.info(cmd_combine_audio)
     # os.system(cmd_combine_audio)
 
     # input_video = output_video
@@ -313,7 +314,7 @@ def inference(audio_path, video_path, bbox_shift, progress=gr.Progress(track_tqd
     
     # input_audio = ffmpeg.input(audio_path)
     
-    # print(len(frames))
+    # logging.info(len(frames))
 
     # imageio.mimwrite(
     #     output_video,
@@ -349,7 +350,7 @@ def inference(audio_path, video_path, bbox_shift, progress=gr.Progress(track_tqd
     # 删除文件夹
     shutil.rmtree(result_img_save_path)
 
-    print(f"result is save to {output_vid_name}")
+    logging.info(f"result is save to {output_vid_name}")
 
     return output_vid_name, bbox_shift_text, bbox_range
 
@@ -362,10 +363,10 @@ def clear_memory():
     torch.cuda.empty_cache()  # 清理PyTorch的显存缓存
     torch.cuda.ipc_collect()  # 清理PyTorch的跨进程通信缓存
     # 2. 打印显存使用情况（可选）
-    print(f"Memory allocated: {torch.cuda.memory_allocated() / (1024 ** 2):.2f} MB")
-    print(f"Max memory allocated: {torch.cuda.max_memory_allocated() / (1024 ** 2):.2f} MB")
-    print(f"Cached memory: {torch.cuda.memory_reserved() / (1024 ** 2):.2f} MB")
-    print(f"Max cached memory: {torch.cuda.max_memory_reserved() / (1024 ** 2):.2f} MB")
+    logging.info(f"Memory allocated: {torch.cuda.memory_allocated() / (1024 ** 2):.2f} MB")
+    logging.info(f"Max memory allocated: {torch.cuda.max_memory_allocated() / (1024 ** 2):.2f} MB")
+    logging.info(f"Cached memory: {torch.cuda.memory_reserved() / (1024 ** 2):.2f} MB")
+    logging.info(f"Max cached memory: {torch.cuda.max_memory_reserved() / (1024 ** 2):.2f} MB")
 
 # load model weights
 # audio_processor,vae,unet,pe  = load_all_model()
@@ -412,10 +413,10 @@ async def test():
 @app.get("/do")
 async def do(audio:str,video:str,bbox:int=0):
     out=inference(audio,video,bbox)
-    print(out)
+    logging.info(out)
     relative_path=out[0]
     absolute_path = os.path.abspath(relative_path)
-    print(relative_path,absolute_path)
+    logging.info(relative_path,absolute_path)
     return PlainTextResponse(absolute_path)
 
 @app.post('/do')
@@ -426,17 +427,17 @@ async def do(audio:UploadFile = File(...), video:UploadFile = File(...), bbox:in
     audio_path = os.path.join(input_dir, audio.filename)
     video_path = os.path.join(input_dir, video.filename)
     
-    print(f"接收上传audio请求{audio_path}")
+    logging.info(f"接收上传audio请求{audio_path}")
     with open(audio_path, "wb") as f:
         f.write(await audio.read())
         
-    print(f"接收上传video请求{video_path}")
+    logging.info(f"接收上传video请求{video_path}")
     with open(video_path, "wb") as f:
         f.write(await video.read())
 
-    print(f"开始执行inference")
+    logging.info(f"开始执行inference")
     out=inference(audio_path, video_path, bbox)
-    print(out)
+    logging.info(out)
     relative_path=out[0]
     range=out[2]
     json={"name":os.path.basename(relative_path),"range":range}
@@ -464,10 +465,10 @@ if __name__ == "__main__":
         from musetalk.utils.preprocessing import get_landmark_and_bbox, read_imgs_parallel, coord_placeholder
         from musetalk.utils.parallel_method import video_to_img_parallel, frames_in_parallel, write_video
 
-        print(device)
+        logging.info(device)
         timesteps = torch.tensor([args.cuda], device=device)
         #uvicorn.run(app="api:app", host="0.0.0.0", port=7862, workers=1,reload=True)
         uvicorn.run(app=app, host="0.0.0.0", port=args.port, workers=1)
     except Exception as e:
-        print(e)
+        logging.info(e)
         exit(0)
