@@ -265,7 +265,7 @@ def inference(audio_path, video_path, bbox_shift, progress=gr.Progress(track_tqd
     # print(cmd_img2video)
     # os.system(cmd_img2video)
     # 帧率
-    fps = 25
+    # fps = 25
     # 图片路径
     # 输出视频路径
     output_video = os.path.join(args.result_dir, output_basename + "_temp.mp4")
@@ -344,7 +344,7 @@ def inference(audio_path, video_path, bbox_shift, progress=gr.Progress(track_tqd
         os.remove(output_vid_name)
         
     # Write the output video
-    video_clip.write_videofile(output_vid_name, codec='libx264', audio_codec='aac',fps=25)
+    video_clip.write_videofile(output_vid_name, codec='libx264', audio_codec='aac',fps=fps)
 
     # 删除文件夹
     shutil.rmtree(result_img_save_path)
