@@ -66,15 +66,20 @@ def frames_in_parallel(res_frame_list, coord_list_cycle, frame_list_cycle, resul
             bbox = coord_list_cycle[i%(len(coord_list_cycle))]
             ori_frame = frame_list_copy[i % len(frame_list_copy)]  # 引用深拷贝后的帧
             x1, y1, x2, y2 = bbox
+            width = x2 - x1
+            height = y2 - y1
 
-            try:
-                res_frame = cv2.resize(res_frame.astype(np.uint8), (x2 - x1, y2 - y1))
-            except Exception as e:
-                logging.info(f"处理帧 {i} 时出错: {e}")
-                continue
+            if width > 0 and height > 0:
+                try:
+                    res_frame = cv2.resize(res_frame.astype(np.uint8), (width, height))
+                    combine_frame = get_image(ori_frame, res_frame, bbox)
+                except Exception as e:
+                    logging.info(f"处理帧 {i} 时出错: {e}")
+                    continue
+            else:
+                logging.info(f"帧 {i} 的边界无效: ({width}, {height})")
+                combine_frame = res_frame
             
-            combine_frame = get_image(ori_frame, res_frame, bbox)
-
             futures.append(executor.submit(save_frame, i, combine_frame, result_img_save_path))
 
         # 等待所有任务完成
