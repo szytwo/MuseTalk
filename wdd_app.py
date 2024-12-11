@@ -114,6 +114,8 @@ def inference(audio_path, video_path, bbox_shift, output):
                  "use_saved_coord": True}  # same with inferenece script
     args = Namespace(**args_dict)
 
+    clear_cuda_cache()
+
     max_workers = 16
 
     input_basename = os.path.basename(video_path).split('.')[0]
@@ -407,7 +409,7 @@ if __name__ == "__main__":
         torch.cuda.set_device(args.cuda)
         device = torch.device(f"cuda:{args.cuda}" if torch.cuda.is_available() else "cpu")
 
-        from musetalk.utils.preprocessing import get_landmark_and_bbox, read_imgs_parallel, coord_placeholder
+        from musetalk.utils.preprocessing import get_landmark_and_bbox, read_imgs_parallel, coord_placeholder, clear_cuda_cache
         from musetalk.utils.parallel_method import video_to_img_parallel, frames_in_parallel, write_video
 
         print(device)

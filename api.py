@@ -8,33 +8,33 @@ import spaces
 import numpy as np
 import sys
 import subprocess
-
-from huggingface_hub import snapshot_download
 import requests
-
 import argparse
 import os
-from omegaconf import OmegaConf
 import numpy as np
 import cv2
 import torch
 import glob
 import pickle
-from tqdm import tqdm
 import copy
-from argparse import Namespace
 import shutil
 import gdown
 import imageio
 import ffmpeg
-from moviepy.editor import *
-from fastapi import FastAPI, File, UploadFile
-from fastapi.responses import PlainTextResponse,JSONResponse,FileResponse
-from custom.file_utils import logging
-
 import uvicorn
-
-app = FastAPI()
+from tqdm import tqdm
+from argparse import Namespace
+from omegaconf import OmegaConf
+from moviepy.editor import *
+from huggingface_hub import snapshot_download
+from fastapi import FastAPI, File, UploadFile, Request, status
+from fastapi.responses import PlainTextResponse, JSONResponse, FileResponse, HTMLResponse
+from fastapi.staticfiles import StaticFiles
+from fastapi.openapi.docs import get_swagger_ui_html
+from starlette.middleware.cors import CORSMiddleware  #引入 CORS中间件模块
+from contextlib import asynccontextmanager
+from custom.file_utils import logging
+from custom.TextProcessor import TextProcessor
 
 ProjectDir = os.path.abspath(os.path.dirname(__file__))
 CheckpointsDir = os.path.join(ProjectDir, "models")
@@ -123,6 +123,8 @@ from musetalk.utils.utils import load_all_model
 def inference(audio_path, video_path, bbox_shift, progress=gr.Progress(track_tqdm=True)):
     args_dict={"result_dir":'./results/output', "fps":25, "batch_size":16, "output_vid_name":'', "use_saved_coord":True}#same with inferenece script
     args = Namespace(**args_dict)
+
+    clear_cuda_cache()
 
     max_workers = 16
 
@@ -406,23 +408,96 @@ def check_video(video):
     imageio.mimwrite(output_video, frames, 'FFMPEG', fps=25, codec='libx264', quality=9, pixelformat='yuv420p')
     return output_video
 
+#设置允许访问的域名
+origins = ["*"]  #"*"，即为所有。
+
+# 定义 FastAPI 应用
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # 在应用启动时加载模型
+    logging.info("Application loaded successfully!")
+    yield  # 这里是应用运行的时间段
+    logging.info("Application shutting down...")  # 在这里可以释放资源   
+    clear_cuda_cache()
+
+app = FastAPI(docs_url=None, lifespan=lifespan)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,  #设置允许的origins来源
+    allow_credentials=True,
+    allow_methods=["*"],  # 设置允许跨域的http方法，比如 get、post、put等。
+    allow_headers=["*"])  #允许跨域的headers，可以用来鉴别来源等作用。
+# 挂载静态文件
+app.mount("/static", StaticFiles(directory="static"), name="static")
+# 使用本地的 Swagger UI 静态资源
+@app.get("/docs", include_in_schema=False)
+async def custom_swagger_ui_html():
+    logging.info("Custom Swagger UI endpoint hit")
+    return get_swagger_ui_html(
+        openapi_url="/openapi.json",
+        title="Custom Swagger UI",
+        swagger_js_url="/static/swagger-ui/5.9.0/swagger-ui-bundle.js",
+        swagger_css_url="/static/swagger-ui/5.9.0/swagger-ui.css",
+    )
+
+@app.middleware("http")
+async def clear_gpu_after_request(request: Request, call_next):
+    try:
+        response = await call_next(request)
+        return response
+    finally:
+        clear_cuda_cache()
+# 自定义异常处理器
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    logging.info(f"Exception during request {request.url}: {exc}")
+
+    clear_cuda_cache()
+    # 记录错误信息
+    TextProcessor.log_error(exc)
+
+    return JSONResponse(
+        {"errcode": 500, "errmsg": "Internal Server Error"},
+        status_code=500
+    )
+
+@app.get("/", response_class=HTMLResponse)
+async def root():
+    return """
+    <!DOCTYPE html>
+    <html>
+        <head>
+            <meta charset=utf-8>
+            <title>Api information</title>
+        </head>
+        <body>
+            <a href='./docs'>Documents of API</a>
+        </body>
+    </html>
+    """
+
 @app.get("/test")
 async def test():
     return PlainTextResponse('success')
 
 @app.get("/do")
-async def do(audio:str,video:str,bbox:int=0):
-    out=inference(audio,video,bbox)
+async def do(audio:str, video:str, bbox:int = 0):
+    out = inference(audio, video, bbox)
+
     logging.info(out)
-    relative_path=out[0]
+
+    relative_path = out[0]
     absolute_path = os.path.abspath(relative_path)
-    logging.info(relative_path,absolute_path)
+
+    logging.info(relative_path, absolute_path)
+
     return PlainTextResponse(absolute_path)
 
 @app.post('/do')
 async def do(audio:UploadFile = File(...), video:UploadFile = File(...), bbox:int = 0):
-    input_dir="./results/input"
-    os.makedirs(input_dir,exist_ok=True)
+    input_dir = "./results/input"
+
+    os.makedirs(input_dir, exist_ok=True)
     
     audio_path = os.path.join(input_dir, audio.filename)
     video_path = os.path.join(input_dir, video.filename)
@@ -436,17 +511,22 @@ async def do(audio:UploadFile = File(...), video:UploadFile = File(...), bbox:in
         f.write(await video.read())
 
     logging.info(f"开始执行inference")
-    out=inference(audio_path, video_path, bbox)
+
+    out = inference(audio_path, video_path, bbox)
+
     logging.info(out)
-    relative_path=out[0]
-    range=out[2]
-    json={"name":os.path.basename(relative_path),"range":range}
+
+    relative_path = out[0]
+    range = out[2]
+    json = {"name": os.path.basename(relative_path), "range": range}
+
     clear_memory()
+
     return JSONResponse(json)
 
 @app.get('/download')
 async def download(name:str):
-    return FileResponse(path=f'results/output/{name}', filename=name, media_type='application/octet-stream')
+    return FileResponse(path = f'results/output/{name}', filename=name, media_type = 'application/octet-stream')
 
 global audio_processor, vae, unet, pe
 
@@ -458,17 +538,22 @@ if __name__ == "__main__":
 
     try:
         audio_processor, vae, unet, pe = load_all_model(args)
+
         os.environ['cuda'] = f"cuda:{args.cuda}"
+
         torch.cuda.set_device(args.cuda)
+
         device = torch.device(f"cuda:{args.cuda}" if torch.cuda.is_available() else "cpu")
 
-        from musetalk.utils.preprocessing import get_landmark_and_bbox, read_imgs_parallel, coord_placeholder
+        from musetalk.utils.preprocessing import get_landmark_and_bbox, read_imgs_parallel, coord_placeholder, clear_cuda_cache
         from musetalk.utils.parallel_method import video_to_img_parallel, frames_in_parallel, write_video
 
         logging.info(device)
+
         timesteps = torch.tensor([args.cuda], device=device)
         #uvicorn.run(app="api:app", host="0.0.0.0", port=7862, workers=1,reload=True)
         uvicorn.run(app=app, host="0.0.0.0", port=args.port, workers=1)
     except Exception as e:
-        logging.info(e)
+        clear_cuda_cache()
+        logging.error(e)
         exit(0)
