@@ -35,6 +35,8 @@ from starlette.middleware.cors import CORSMiddleware  #引入 CORS中间件模�
 from contextlib import asynccontextmanager
 from custom.file_utils import logging
 from custom.TextProcessor import TextProcessor
+from musetalk.utils.preprocessing import get_landmark_and_bbox, read_imgs_parallel, coord_placeholder, clear_cuda_cache
+from musetalk.utils.parallel_method import video_to_img_parallel, frames_in_parallel, write_video
 
 ProjectDir = os.path.abspath(os.path.dirname(__file__))
 CheckpointsDir = os.path.join(ProjectDir, "models")
@@ -120,11 +122,9 @@ from musetalk.utils.utils import load_all_model
 
 #@spaces.GPU(duration=600)
 @torch.no_grad()
-def inference(audio_path, video_path, bbox_shift, progress=gr.Progress(track_tqdm=True)):
-    args_dict={"result_dir":'./results/output', "fps":25, "batch_size":16, "output_vid_name":'', "use_saved_coord":True}#same with inferenece script
+def inference(audio_path, video_path, bbox_shift, output, progress=gr.Progress(track_tqdm=True)):
+    args_dict={"result_dir":'./results/output', "fps":25, "batch_size":16, "output_vid_name":'', "use_saved_coord":True} #same with inferenece script
     args = Namespace(**args_dict)
-
-    clear_cuda_cache()
 
     max_workers = 16
 
@@ -138,26 +138,16 @@ def inference(audio_path, video_path, bbox_shift, progress=gr.Progress(track_tqd
     os.makedirs(result_img_save_path,exist_ok =True)
 
     if args.output_vid_name=="":
-        output_vid_name = os.path.join(args.result_dir, output_basename+".mp4")
+        if output:
+            output_vid_name = output
+        else:
+            output_vid_name = os.path.join(args.result_dir, output_basename+".mp4")
     else:
         output_vid_name = os.path.join(args.result_dir, args.output_vid_name)
     ############################################## extract frames from source video ##############################################
     if get_file_type(video_path)=="video":
         save_dir_full = os.path.join(args.result_dir, input_basename)
-        # os.makedirs(save_dir_full,exist_ok = True)
-        # cmd = f"ffmpeg -v fatal -i {video_path} -start_number 0 {save_dir_full}/%08d.png"
-        # os.system(cmd)
-        # 读取视频
-        #logging.info("start reader video")
-        
-        #reader = imageio.get_reader(video_path)
-        #num_frames = reader.count_frames()  # 获取视频总帧数
-
-        #logging.info("start save video image")
-        # 保存图片
-        #for i, im in enumerate(tqdm(reader, total=num_frames)):
-        #    imageio.imwrite(f"{save_dir_full}/{i:08d}.png", im)
-
+ 
         if os.path.exists(save_dir_full) and args.use_saved_coord:
             logging.info(f"使用视频图像缓存{save_dir_full}")
             fps = get_video_fps(video_path)
@@ -246,56 +236,16 @@ def inference(audio_path, video_path, bbox_shift, progress=gr.Progress(track_tqd
             res_frame_list.append(res_frame)
             
     ############################################## pad to full image ##############################################
-    # logging.info("pad talking image to original video")
-
-    # for i, res_frame in enumerate(tqdm(res_frame_list)):
-    #     bbox = coord_list_cycle[i%(len(coord_list_cycle))]
-    #     ori_frame = copy.deepcopy(frame_list_cycle[i%(len(frame_list_cycle))])
-    #     x1, y1, x2, y2 = bbox
-
-    #     try:
-    #         res_frame = cv2.resize(res_frame.astype(np.uint8), (x2 - x1, y2 - y1))
-    #     except:
-    # #                 logging.info(bbox)
-    #         continue
-        
-    #     combine_frame = get_image(ori_frame,res_frame,bbox)
-    #     cv2.imwrite(f"{result_img_save_path}/{str(i).zfill(8)}.png",combine_frame)
-
     frames_in_parallel(res_frame_list, coord_list_cycle, frame_list_cycle, result_img_save_path, max_workers)    
 
-    # cmd_img2video = f"ffmpeg -y -v fatal -r {fps} -f image2 -i {result_img_save_path}/%08d.png -vcodec libx264 -vf format=rgb24,scale=out_color_matrix=bt709,format=yuv420p temp.mp4"
-    # logging.info(cmd_img2video)
-    # os.system(cmd_img2video)
     # 帧率
     # fps = 25
     # 图片路径
     # 输出视频路径
     output_video = os.path.join(args.result_dir, output_basename + "_temp.mp4")
-
-    # # 读取图片
-    # def is_valid_image(file):
-    #     pattern = re.compile(r'\d{8}\.png')
-    #     return pattern.match(file)
-
-    # images = []
-    # files = [file for file in os.listdir(result_img_save_path) if is_valid_image(file)]
-    # files.sort(key=lambda x: int(x.split('.')[0]))
-
-    # for file in files:
-    #     filename = os.path.join(result_img_save_path, file)
-    #     images.append(imageio.imread(filename))
-        
-    # # 保存视频
-    # imageio.mimwrite(output_video, images, 'FFMPEG', fps=fps, codec='libx264', pixelformat='yuv420p')
     
     input_video, frames = write_video(result_img_save_path, output_video, fps, max_workers)
     
-    # cmd_combine_audio = f"ffmpeg -y -v fatal -i {audio_path} -i temp.mp4 {output_vid_name}"
-    # logging.info(cmd_combine_audio)
-    # os.system(cmd_combine_audio)
-
-    # input_video = output_video
     # Check if the input_video and audio_path exist
     if not os.path.exists(input_video):
         raise FileNotFoundError(f"Input video file not found: {input_video}")
@@ -305,33 +255,7 @@ def inference(audio_path, video_path, bbox_shift, progress=gr.Progress(track_tqd
     # 读取视频
     reader = imageio.get_reader(input_video)
     fps = reader.get_meta_data()['fps']  # 获取原视频的帧率
-
-    # 将帧存储在列表中
-    # frames = images
-
-    # 保存视频并添加音频
-    # imageio.mimwrite(output_vid_name, frames, 'FFMPEG', fps=fps, codec='libx264', audio_codec='aac', input_params=['-i', audio_path])
-    
-    # input_video = ffmpeg.input(input_video)
-    
-    # input_audio = ffmpeg.input(audio_path)
-    
-    # logging.info(len(frames))
-
-    # imageio.mimwrite(
-    #     output_video,
-    #     frames,
-    #     'FFMPEG',
-    #     fps=25,
-    #     codec='libx264',
-    #     audio_codec='aac',
-    #     input_params=['-i', audio_path],
-    #     output_params=['-y'],  # Add the '-y' flag to overwrite the output file if it exists
-    # )
-    # writer = imageio.get_writer(output_vid_name, fps = 25, codec='libx264', quality=10, pixelformat='yuvj444p')
-    # for im in frames:
-    #     writer.append_data(im)
-    # writer.close()
+    reader.close()
 
     # Load the video
     video_clip = VideoFileClip(input_video)
@@ -353,29 +277,10 @@ def inference(audio_path, video_path, bbox_shift, progress=gr.Progress(track_tqd
     shutil.rmtree(result_img_save_path)
 
     logging.info(f"result is save to {output_vid_name}")
+    logging.info(f"bbox_shift_text: {bbox_shift_text}")
+    logging.info(f"bbox_range: {bbox_range}")
 
     return output_vid_name, bbox_shift_text, bbox_range
-
-def clear_memory():
-    """
-    清理PyTorch的显存和系统内存缓存。
-    """
-    # 1. 清理缓存的变量
-    gc.collect()  # 触发Python垃圾回收
-    torch.cuda.empty_cache()  # 清理PyTorch的显存缓存
-    torch.cuda.ipc_collect()  # 清理PyTorch的跨进程通信缓存
-    # 2. 打印显存使用情况（可选）
-    logging.info(f"Memory allocated: {torch.cuda.memory_allocated() / (1024 ** 2):.2f} MB")
-    logging.info(f"Max memory allocated: {torch.cuda.max_memory_allocated() / (1024 ** 2):.2f} MB")
-    logging.info(f"Cached memory: {torch.cuda.memory_reserved() / (1024 ** 2):.2f} MB")
-    logging.info(f"Max cached memory: {torch.cuda.max_memory_reserved() / (1024 ** 2):.2f} MB")
-
-# load model weights
-# audio_processor,vae,unet,pe  = load_all_model()
-# device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-# timesteps = torch.tensor([0], device=device)
-#device = torch.device("cuda:1" if torch.cuda.is_available() else "cpu")
-#timesteps = torch.tensor([1], device=device)
 
 def check_video(video):
     if not isinstance(video, str):
@@ -482,11 +387,9 @@ async def test():
 
 @app.get("/do")
 async def do(audio:str, video:str, bbox:int = 0):
-    out = inference(audio, video, bbox)
+    output_vid_name, bbox_shift_text, bbox_range = inference(audio, video, bbox)
 
-    logging.info(out)
-
-    relative_path = out[0]
+    relative_path = output_vid_name
     absolute_path = os.path.abspath(relative_path)
 
     logging.info(relative_path, absolute_path)
@@ -512,15 +415,11 @@ async def do(audio:UploadFile = File(...), video:UploadFile = File(...), bbox:in
 
     logging.info(f"开始执行inference")
 
-    out = inference(audio_path, video_path, bbox)
+    output_vid_name, bbox_shift_text, bbox_range = inference(audio_path, video_path, bbox)
 
-    logging.info(out)
-
-    relative_path = out[0]
-    range = out[2]
+    relative_path = output_vid_name
+    range = bbox_range
     json = {"name": os.path.basename(relative_path), "range": range}
-
-    clear_memory()
 
     return JSONResponse(json)
 
@@ -532,27 +431,28 @@ global audio_processor, vae, unet, pe
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
+    parser.add_argument("--api", type=bool, default=True)
     parser.add_argument("--port", type=int, default=7862)
-    parser.add_argument("--cuda", type=int, default=0)
+    parser.add_argument("--audio", type=str, default="")
+    parser.add_argument("--video", type=str, default="")
+    parser.add_argument("--output", type=str, default="")
+    parser.add_argument("--bbox_shift", type=int, default=0)
     args = parser.parse_args()
 
     try:
-        audio_processor, vae, unet, pe = load_all_model(args)
+        audio_processor, vae, unet, pe = load_all_model()
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        timesteps = torch.tensor([0], device=device)
 
-        os.environ['cuda'] = f"cuda:{args.cuda}"
+        if args.api:
+            uvicorn.run(app=app, host="0.0.0.0", port=args.port, workers=1)
+        else:
+            output_vid_name, bbox_shift_text, bbox_range = inference(args.audio, args.video, args.bbox_shift, args.output)
+            range = bbox_range
+            sname, sext = os.path.splitext(args.output)
 
-        torch.cuda.set_device(args.cuda)
-
-        device = torch.device(f"cuda:{args.cuda}" if torch.cuda.is_available() else "cpu")
-
-        from musetalk.utils.preprocessing import get_landmark_and_bbox, read_imgs_parallel, coord_placeholder, clear_cuda_cache
-        from musetalk.utils.parallel_method import video_to_img_parallel, frames_in_parallel, write_video
-
-        logging.info(device)
-
-        timesteps = torch.tensor([args.cuda], device=device)
-        #uvicorn.run(app="api:app", host="0.0.0.0", port=7862, workers=1,reload=True)
-        uvicorn.run(app=app, host="0.0.0.0", port=args.port, workers=1)
+            with open(f'{sname}.txt', 'w') as file:
+                file.write(str(range))
     except Exception as e:
         clear_cuda_cache()
         logging.error(e)

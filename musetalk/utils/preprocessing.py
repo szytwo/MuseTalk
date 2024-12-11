@@ -17,24 +17,36 @@ from concurrent.futures import ThreadPoolExecutor
 from custom.file_utils import logging
 
 # initialize the mmpose model
-cuda=os.getenv('cuda', "cuda")
-device = torch.device(cuda if torch.cuda.is_available() else "cpu")
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 ProjectDir = os.path.dirname(os.path.dirname(os.path.abspath(os.path.dirname(__file__))))
 config_file = f'{ProjectDir}/musetalk/utils/dwpose/rtmpose-l_8xb32-270e_coco-ubody-wholebody-384x288.py'
 checkpoint_file = f'{ProjectDir}/models/dwpose/dw-ll_ucoco_384.pth'
 model = init_model(config_file, checkpoint_file, device=device)
 
 # initialize the face detection model
-device_str = cuda if torch.cuda.is_available() else "cpu"
+device_str = "cuda" if torch.cuda.is_available() else "cpu"
 fa = FaceAlignment(LandmarksType._2D, flip_input=False,device=device_str)
 
 # maker if the bbox is not sufficient 
 coord_placeholder = (0.0,0.0,0.0,0.0)
 # 定义一个函数进行显存清理
 def clear_cuda_cache():
-    if device.type == 'cuda':
+    """
+    清理PyTorch的显存和系统内存缓存。
+    """
+    if torch.cuda.is_available():
+        logging.info("Clearing GPU memory...")
         torch.cuda.empty_cache()
-        logging.info("CUDA cache cleared!")
+        torch.cuda.ipc_collect()
+
+        # 打印显存日志
+        logging.info(f"[GPU Memory] Allocated: {torch.cuda.memory_allocated() / (1024 ** 2):.2f} MB")
+        logging.info(f"[GPU Memory] Max Allocated: {torch.cuda.max_memory_allocated() / (1024 ** 2):.2f} MB")
+        logging.info(f"[GPU Memory] Reserved: {torch.cuda.memory_reserved() / (1024 ** 2):.2f} MB")
+        logging.info(f"[GPU Memory] Max Reserved: {torch.cuda.max_memory_reserved() / (1024 ** 2):.2f} MB")
+
+        # 重置统计信息
+        torch.cuda.reset_peak_memory_stats()
 
 def resize_landmark(landmark, w, h, new_w, new_h):
     w_ratio = new_w / w
