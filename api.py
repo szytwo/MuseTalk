@@ -122,7 +122,7 @@ from musetalk.utils.utils import load_all_model
 
 #@spaces.GPU(duration=600)
 @torch.no_grad()
-def inference(audio_path, video_path, bbox_shift, output, progress=gr.Progress(track_tqdm=True)):
+def inference(audio_path, video_path, bbox_shift, output:str = "", progress=gr.Progress(track_tqdm=True)):
     args_dict={"result_dir":'./results/output', "fps":25, "batch_size":16, "output_vid_name":'', "use_saved_coord":True} #same with inferenece script
     args = Namespace(**args_dict)
 
@@ -305,12 +305,14 @@ def check_video(video):
     # 读取视频
     reader = imageio.get_reader(video)
     fps = reader.get_meta_data()['fps']  # 获取原视频的帧率
+    reader.close()
 
     # 将帧存储在列表中
     frames = [im for im in reader]
 
     # 保存视频
-    imageio.mimwrite(output_video, frames, 'FFMPEG', fps=25, codec='libx264', quality=9, pixelformat='yuv420p')
+    imageio.mimwrite(output_video, frames, 'FFMPEG', fps=fps, codec='libx264', quality=9, pixelformat='yuv420p')
+
     return output_video
 
 #设置允许访问的域名
