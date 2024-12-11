@@ -149,7 +149,7 @@ class Avatar:
         input_img_list = sorted(glob.glob(os.path.join(self.full_imgs_path, '*.[jpJP][pnPN]*[gG]')))
         
         print("extracting landmarks...")
-        coord_list, frame_list, bbox_shift_text, bbox_range = get_landmark_and_bbox(input_img_list, self.bbox_shift)
+        coord_list, frame_list = get_landmark_and_bbox(input_img_list, self.bbox_shift)
         input_latent_list = []
         idx = -1
         # maker if the bbox is not sufficient 

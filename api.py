@@ -1,13 +1,7 @@
 import os
 import time
-import pdb
-import re
-import gc
 import gradio as gr
-import spaces
 import numpy as np
-import sys
-import subprocess
 import requests
 import argparse
 import os
@@ -16,18 +10,15 @@ import cv2
 import torch
 import glob
 import pickle
-import copy
 import shutil
 import gdown
 import imageio
-import ffmpeg
 import uvicorn
 from tqdm import tqdm
 from argparse import Namespace
-from omegaconf import OmegaConf
 from moviepy.editor import *
 from huggingface_hub import snapshot_download
-from fastapi import FastAPI, File, UploadFile, Request, status
+from fastapi import FastAPI, File, UploadFile, Request
 from fastapi.responses import PlainTextResponse, JSONResponse, FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.openapi.docs import get_swagger_ui_html
@@ -35,8 +26,12 @@ from starlette.middleware.cors import CORSMiddleware  #引入 CORS中间件模�
 from contextlib import asynccontextmanager
 from custom.file_utils import logging
 from custom.TextProcessor import TextProcessor
-from musetalk.utils.preprocessing import get_landmark_and_bbox, read_imgs_parallel, coord_placeholder, clear_cuda_cache
-from musetalk.utils.parallel_method import video_to_img_parallel, frames_in_parallel, write_video
+from custom.Preprocessing import Preprocessing
+from custom.image_utils import read_imgs_parallel
+from custom.parallel_method import video_to_img_parallel, frames_in_parallel, write_video
+from musetalk.utils.utils import get_file_type,get_video_fps,datagen
+from musetalk.utils.blending import get_image
+from musetalk.utils.utils import load_all_model
 
 ProjectDir = os.path.abspath(os.path.dirname(__file__))
 CheckpointsDir = os.path.join(ProjectDir, "models")
@@ -114,19 +109,13 @@ def download_model():
     else:
         logging.info("Already download the model.")
 
-download_model()  # for huggingface deployment.
-
-from musetalk.utils.utils import get_file_type,get_video_fps,datagen
-from musetalk.utils.blending import get_image
-from musetalk.utils.utils import load_all_model
-
 #@spaces.GPU(duration=600)
 @torch.no_grad()
 def inference(audio_path, video_path, bbox_shift, output:str = "", progress=gr.Progress(track_tqdm=True)):
     args_dict={"result_dir":'./results/output', "fps":25, "batch_size":16, "output_vid_name":'', "use_saved_coord":True} #same with inferenece script
     args = Namespace(**args_dict)
 
-    max_workers = 16
+    max_workers = 8
 
     input_basename = os.path.basename(video_path).split('.')[0]
     audio_basename  = os.path.basename(audio_path).split('.')[0]
@@ -189,7 +178,7 @@ def inference(audio_path, video_path, bbox_shift, output:str = "", progress=gr.P
     if is_landmark_and_bbox:
         logging.info("正在提取口型坐标（耗时）...")
 
-        coord_list, frame_list, bbox_shift_text, bbox_range = get_landmark_and_bbox(input_img_list, bbox_shift, 2)
+        coord_list, frame_list, bbox_shift_text, bbox_range = preprocessing.get_landmark_and_bbox(input_img_list, bbox_shift, 2)
 
         with open(crop_coord_save_path, 'wb') as f:
             pickle.dump(coord_list, f)
@@ -203,7 +192,7 @@ def inference(audio_path, video_path, bbox_shift, output:str = "", progress=gr.P
     input_latent_list = []
 
     for bbox, frame in zip(coord_list, frame_list):
-        if bbox == coord_placeholder:
+        if bbox == preprocessing.coord_placeholder:
             continue
 
         x1, y1, x2, y2 = bbox
@@ -325,7 +314,7 @@ async def lifespan(app: FastAPI):
     logging.info("Application loaded successfully!")
     yield  # 这里是应用运行的时间段
     logging.info("Application shutting down...")  # 在这里可以释放资源   
-    clear_cuda_cache()
+    Preprocessing.clear_cuda_cache()
 
 app = FastAPI(docs_url=None, lifespan=lifespan)
 app.add_middleware(
@@ -353,13 +342,13 @@ async def clear_gpu_after_request(request: Request, call_next):
         response = await call_next(request)
         return response
     finally:
-        clear_cuda_cache()
+        Preprocessing.clear_cuda_cache()
 # 自定义异常处理器
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
     logging.info(f"Exception during request {request.url}: {exc}")
 
-    clear_cuda_cache()
+    Preprocessing.clear_cuda_cache()
     # 记录错误信息
     TextProcessor.log_error(exc)
 
@@ -442,9 +431,13 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     try:
+        download_model()  # for huggingface deployment.
+
         audio_processor, vae, unet, pe = load_all_model()
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         timesteps = torch.tensor([0], device=device)
+
+        preprocessing = Preprocessing()
 
         if args.api:
             uvicorn.run(app=app, host="0.0.0.0", port=args.port, workers=1)
@@ -456,6 +449,6 @@ if __name__ == "__main__":
             with open(f'{sname}.txt', 'w') as file:
                 file.write(str(range))
     except Exception as e:
-        clear_cuda_cache()
+        Preprocessing.clear_cuda_cache()
         logging.error(e)
         exit(0)
