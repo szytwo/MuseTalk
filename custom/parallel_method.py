@@ -78,7 +78,7 @@ def frames_in_parallel(res_frame_list, coord_list_cycle, frame_list_cycle, resul
                     continue
             else:
                 logging.info(f"帧 {i} 的边界无效: ({width}, {height})")
-                combine_frame = res_frame
+                combine_frame = ori_frame
             
             futures.append(executor.submit(save_frame, i, combine_frame, result_img_save_path))
 

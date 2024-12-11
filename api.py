@@ -28,9 +28,7 @@ from custom.file_utils import logging
 from custom.TextProcessor import TextProcessor
 from custom.Preprocessing import Preprocessing
 from custom.image_utils import read_imgs_parallel
-from custom.parallel_method import video_to_img_parallel, frames_in_parallel, write_video
 from musetalk.utils.utils import get_file_type,get_video_fps,datagen
-from musetalk.utils.blending import get_image
 from musetalk.utils.utils import load_all_model
 
 ProjectDir = os.path.abspath(os.path.dirname(__file__))
@@ -433,6 +431,8 @@ if __name__ == "__main__":
     try:
         download_model()  # for huggingface deployment.
 
+        from custom.parallel_method import video_to_img_parallel, frames_in_parallel, write_video
+        
         audio_processor, vae, unet, pe = load_all_model()
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         timesteps = torch.tensor([0], device=device)
