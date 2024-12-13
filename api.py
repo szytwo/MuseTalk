@@ -113,7 +113,9 @@ def inference(audio_path, video_path, bbox_shift, output:str = "", progress=gr.P
     args_dict={"result_dir":'./results/output', "fps":25, "batch_size":16, "output_vid_name":'', "use_saved_coord":True} #same with inferenece script
     args = Namespace(**args_dict)
 
-    max_workers = 4
+    # 获取 CPU 核心数
+    max_workers = os.cpu_count()/2
+    logging.info(f"max_workers: {max_workers}")
 
     input_basename = os.path.basename(video_path).split('.')[0]
     audio_basename  = os.path.basename(audio_path).split('.')[0]
