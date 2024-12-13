@@ -24,8 +24,9 @@ def convert_video_to_25fps(video_path):
 
         fps = 25
         converted_video_path = add_suffix_to_filename(video_path, f"_{fps}")
+        # NVIDIA 编码器 codec="h264_nvenc"    CPU编码 codec="libx264"
         clip.set_fps(fps).write_videofile(
-            converted_video_path, codec="libx264", audio_codec="aac", preset="fast"
+            converted_video_path, codec="h264_nvenc", audio_codec="aac", preset="fast"
         )
         video_path = converted_video_path
 

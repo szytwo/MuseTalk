@@ -303,7 +303,8 @@ def inference(audio_path, video_path, bbox_shift, output:str = "", progress=gr.P
         os.remove(output_vid_name)
         
     # Write the output video
-    video_clip.write_videofile(output_vid_name, codec='libx264', audio_codec='aac',fps=fps)
+    # NVIDIA 编码器 codec="h264_nvenc"    CPU编码 codec="libx264"
+    video_clip.write_videofile(output_vid_name, codec='h264_nvenc', audio_codec='aac',fps=fps)
 
     # 删除文件夹
     shutil.rmtree(result_img_save_path)
@@ -343,7 +344,8 @@ def check_video(video):
     frames = [im for im in reader]
 
     # 保存视频
-    imageio.mimwrite(output_video, frames, 'FFMPEG', fps=fps, codec='libx264', quality=9, pixelformat='yuv420p')
+    # NVIDIA 编码器 codec="h264_nvenc"    CPU编码 codec="libx264"
+    imageio.mimwrite(output_video, frames, 'FFMPEG', fps=fps, codec='h264_nvenc', quality=9, pixelformat='yuv420p')
 
     return output_video
 
