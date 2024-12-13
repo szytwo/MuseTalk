@@ -64,3 +64,8 @@ def load_wav(wav, target_sr):
 
 def get_full_path(path):
     return os.path.abspath(path) if not os.path.isabs(path) else path
+
+def add_suffix_to_filename(filename, suffix):
+    """ 在文件名中添加后缀 """
+    base, ext = os.path.splitext(filename)
+    return f"{base}{suffix}{ext}"

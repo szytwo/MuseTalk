@@ -6,11 +6,34 @@ import numpy as np
 import imageio
 import re
 
+from moviepy.editor import *
 from tqdm import tqdm
 from concurrent.futures import ThreadPoolExecutor
-from musetalk.utils.utils import get_file_type,get_video_fps,datagen
+from musetalk.utils.utils import get_file_type, get_video_fps, datagen
 from musetalk.utils.blending import get_image
-from custom.file_utils import logging
+from custom.file_utils import logging, add_suffix_to_filename
+
+def convert_video_to_25fps(video_path):
+    """ 使用 MoviePy 将视频转换为 25 FPS """
+    # 检查视频帧率
+    clip = VideoFileClip(video_path)
+    fps = clip.fps
+
+    if fps != 25:
+        logging.info(f"视频帧率为 {fps}，转换为 25 FPS")
+
+        fps = 25
+        converted_video_path = add_suffix_to_filename(video_path, f"_{fps}")
+        clip.set_fps(fps).write_videofile(
+            converted_video_path, codec="libx264", audio_codec="aac", preset="fast"
+        )
+        video_path = converted_video_path
+
+        logging.info(f"视频转换完成: {video_path}")
+
+    clip.close()
+
+    return video_path, fps
 
 def save_img(image, save_path):
     imageio.imwrite(save_path, image)
@@ -18,7 +41,7 @@ def save_img(image, save_path):
 def video_to_img_parallel(video_path, save_dir, max_duration = 10, max_workers = 8):
     os.makedirs(save_dir, exist_ok=True)
 
-    fps = get_video_fps(video_path)
+    video_path, fps = convert_video_to_25fps(video_path)
 
     reader = imageio.get_reader(video_path)
     frame_count = reader.count_frames()
