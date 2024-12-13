@@ -98,10 +98,11 @@ def frames_in_parallel(res_frame_list, coord_list_cycle, frame_list_cycle, resul
                     combine_frame = get_image(ori_frame, res_frame, bbox)
                 except Exception as e:
                     logging.info(f"处理帧 {i} 时出错: {e}")
+                    combine_frame = ori_frame # 出错时采用原图
                     continue
             else:
                 logging.info(f"帧 {i} 的边界无效: ({width}, {height})")
-                combine_frame = ori_frame
+                combine_frame = ori_frame # 边界无效时采用原图
             
             futures.append(executor.submit(save_frame, i, combine_frame, result_img_save_path))
 

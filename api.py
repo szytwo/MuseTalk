@@ -198,12 +198,22 @@ def inference(audio_path, video_path, bbox_shift, output:str = "", progress=gr.P
     logging.info("正在提取图像帧潜在特征...")
 
     input_latent_list = []
+    latent_placeholder = torch.zeros((1, 8, 32, 32), dtype=torch.float32).to(unet.device) # 无效帧或无面部张量占位符
+
     for bbox, frame in tqdm(zip(coord_list, frame_list), total = len(coord_list)):
         if bbox == preprocessing.coord_placeholder:
+            input_latent_list.append(latent_placeholder)  # 无效帧或无面部张量添加占位符
             continue
 
         x1, y1, x2, y2 = bbox
         crop_frame = frame[y1:y2, x1:x2]
+        # 检查裁剪后的图像是否为空
+        if crop_frame.size == 0:
+            logging.info(f"error bbox:{bbox}")
+            input_latent_list.append(latent_placeholder)  # 添加占位符
+            # 如果为空，跳过这帧
+            continue
+
         crop_frame = cv2.resize(crop_frame,(256,256),interpolation = cv2.INTER_LANCZOS4)
         latents = vae.get_latents_for_unet(crop_frame)
         input_latent_list.append(latents)
@@ -226,15 +236,36 @@ def inference(audio_path, video_path, bbox_shift, output:str = "", progress=gr.P
     res_frame_list = []
 
     for i, (whisper_batch,latent_batch) in enumerate(tqdm(gen,total=int(np.ceil(float(video_num)/batch_size)))):
-        tensor_list = [torch.FloatTensor(arr) for arr in whisper_batch]
-        audio_feature_batch = torch.stack(tensor_list).to(unet.device) # torch, B, 5*N,384
+        tensor_list = []
+        valid_latents = []
+        valid_positions = []
+
+        # 收集有效的音频和潜在特征
+        for j, (w_feat, l_feat) in enumerate(zip(whisper_batch, latent_batch)):
+            if torch.equal(l_feat, latent_placeholder): # 无效帧或无面部张量添加占位符，后面用原图显示
+                # 占位符，保留 None
+                res_frame_list.append(None)
+            else:
+                tensor_list.append(torch.FloatTensor(w_feat))
+                valid_latents.append(l_feat)
+                valid_positions.append(len(res_frame_list))  # 记录插入位置
+                res_frame_list.append(None)  # 占位，稍后填充
+
+        if not tensor_list:  # 没有有效特征，跳过整个批次
+            continue
+
+        # 将 valid_latents 转换为张量
+        valid_latents_tensor = torch.stack(valid_latents).to(unet.device)
+        # 推理与解码
+        audio_feature_batch = torch.stack(tensor_list).to(unet.device)
         audio_feature_batch = pe(audio_feature_batch)
         
-        pred_latents = unet.model(latent_batch, timesteps, encoder_hidden_states=audio_feature_batch).sample
+        pred_latents = unet.model(valid_latents_tensor, timesteps, encoder_hidden_states=audio_feature_batch).sample
         recon = vae.decode_latents(pred_latents)
 
-        for res_frame in recon:
-            res_frame_list.append(res_frame)
+        # 在正确位置插入解码结果
+        for pos, frame in zip(valid_positions, recon):
+            res_frame_list[pos] = frame
             
     ############################################## pad to full image ##############################################
     frames_in_parallel(res_frame_list, coord_list_cycle, frame_list_cycle, result_img_save_path, max_workers)    
