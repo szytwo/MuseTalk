@@ -14,6 +14,9 @@ IF ERRORLEVEL 1 (
     exit /b
 )
 
+REM 设置 GPU 环境变量，选择显卡
+set CUDA_VISIBLE_DEVICES=0
+
 REM 执行 Python 脚本
 python api.py
 
