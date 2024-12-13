@@ -51,7 +51,7 @@ def video_to_img_parallel(video_path, save_dir, max_duration = 10, max_workers =
 
     #save_paths = [os.path.join(save_dir, f"{i:08d}.png") for i in range(total_frames)]
     save_paths = []
-    logging.info(f"开始读取视频的前 {max_duration} 秒 ({total_frames} 帧)...")
+    logging.info(f"正在读取视频的前 {max_duration} 秒 ({total_frames} 帧)...")
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
         futures = []
         for i, frame in enumerate(tqdm(reader, total=total_frames)):
@@ -79,7 +79,7 @@ def save_frame(i, combine_frame, result_img_save_path):
     return output_path
 
 def frames_in_parallel(res_frame_list, coord_list_cycle, frame_list_cycle, result_img_save_path, max_workers=8):
-    logging.info("开始将语音图像转换为原始视频图像...")
+    logging.info("正在将语音图像转换为原始视频图像...")
     # 在主函数中提前深拷贝 frame_list_cycle
     frame_list_copy = [copy.deepcopy(frame) for frame in frame_list_cycle]
 
@@ -121,7 +121,7 @@ def read_image(image_path):
     return cv2.imread(image_path)
 
 def write_video(result_img_save_path, output_video, fps=25, max_workers=8):
-    logging.info(f"开始将图像合成视频...")    
+    logging.info(f"正在将图像合成视频...")    
     # 检查文件是否存在，若存在则删除
     if os.path.exists(output_video):
         os.remove(output_video)

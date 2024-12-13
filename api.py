@@ -113,7 +113,7 @@ def inference(audio_path, video_path, bbox_shift, output:str = "", progress=gr.P
     args_dict={"result_dir":'./results/output', "fps":25, "batch_size":16, "output_vid_name":'', "use_saved_coord":True} #same with inferenece script
     args = Namespace(**args_dict)
 
-    max_workers = 8
+    max_workers = 4
 
     input_basename = os.path.basename(video_path).split('.')[0]
     audio_basename  = os.path.basename(audio_path).split('.')[0]
@@ -128,9 +128,10 @@ def inference(audio_path, video_path, bbox_shift, output:str = "", progress=gr.P
         if output:
             output_vid_name = output
         else:
-            output_vid_name = os.path.join(args.result_dir, output_basename+".mp4")
+            output_vid_name = os.path.join(args.result_dir, output_basename + ".mp4")
     else:
         output_vid_name = os.path.join(args.result_dir, args.output_vid_name)
+
     ############################################## extract frames from source video ##############################################
     if get_file_type(video_path)=="video":
         save_dir_full = os.path.join(args.result_dir, input_basename)
@@ -148,26 +149,28 @@ def inference(audio_path, video_path, bbox_shift, output:str = "", progress=gr.P
         input_img_list = sorted(input_img_list, key=lambda x: int(os.path.splitext(os.path.basename(x))[0]))
         fps = args.fps
     #logging.info(input_img_list)
-    ############################################## extract audio feature ##############################################
-    whisper_feature = audio_processor.audio2feat(audio_path)
-    whisper_chunks = audio_processor.feature2chunks(feature_array=whisper_feature,fps=fps)
+
     ############################################## preprocess input image  ##############################################
     is_landmark_and_bbox = True
 
     if os.path.exists(crop_coord_save_path) and args.use_saved_coord:
         # 加载缓存的 bbox 数据（包括 bbox_shift_text 和 bbox_range）
         if os.path.exists(bbox_cache_save_path):
-            logging.info(f"使用口型坐标缓存{bbox_cache_save_path}")
-
-            with open(crop_coord_save_path,'rb') as f:
-                coord_list = pickle.load(f)
-            frame_list = read_imgs_parallel(input_img_list, max_workers)
+            logging.info(f"使用口型坐标缓存 {bbox_cache_save_path}")
 
             with open(bbox_cache_save_path, 'rb') as f:
                 bbox_cache = pickle.load(f)
 
-            bbox_shift_text = bbox_cache['bbox_shift_text']
-            bbox_range = bbox_cache['bbox_range']
+            bbox_shift_text = bbox_cache.get('bbox_shift_text', None)
+            bbox_range = bbox_cache.get('bbox_range', None)
+            fps =  bbox_cache.get('fps', fps)
+
+            logging.info(f"bbox_shift_text: {bbox_shift_text} bbox_range: {bbox_range} fps: {fps}")
+
+            with open(crop_coord_save_path,'rb') as f:
+                coord_list = pickle.load(f)
+
+            frame_list = read_imgs_parallel(input_img_list, max_workers)
 
             is_landmark_and_bbox = False
         else:
@@ -176,20 +179,24 @@ def inference(audio_path, video_path, bbox_shift, output:str = "", progress=gr.P
     if is_landmark_and_bbox:
         logging.info("正在提取口型坐标（耗时）...")
 
-        coord_list, frame_list, bbox_shift_text, bbox_range = preprocessing.get_landmark_and_bbox(input_img_list, bbox_shift, 2)
+        coord_list, frame_list, bbox_shift_text, bbox_range = preprocessing.get_landmark_and_bbox(
+            input_img_list, 
+            bbox_shift, 
+            2
+        )
 
         with open(crop_coord_save_path, 'wb') as f:
             pickle.dump(coord_list, f)
         # 保存计算后的 bbox_shift_text 和 bbox_range 到缓存
-        bbox_cache = {'bbox_shift_text': bbox_shift_text, 'bbox_range': bbox_range}
+        bbox_cache = {'bbox_shift_text': bbox_shift_text, 'bbox_range': bbox_range, 'fps': fps}
 
         with open(bbox_cache_save_path, 'wb') as f:
             pickle.dump(bbox_cache, f)
 
-    i = 0
-    input_latent_list = []
+    logging.info("正在提取图像帧潜在特征...")
 
-    for bbox, frame in zip(coord_list, frame_list):
+    input_latent_list = []
+    for bbox, frame in tqdm(zip(coord_list, frame_list), total = len(coord_list)):
         if bbox == preprocessing.coord_placeholder:
             continue
 
@@ -203,8 +210,13 @@ def inference(audio_path, video_path, bbox_shift, output:str = "", progress=gr.P
     frame_list_cycle = frame_list + frame_list[::-1]
     coord_list_cycle = coord_list + coord_list[::-1]
     input_latent_list_cycle = input_latent_list + input_latent_list[::-1]
+
+    ############################################## extract audio feature ##############################################
+    whisper_feature = audio_processor.audio2feat(audio_path)
+    whisper_chunks = audio_processor.feature2chunks(feature_array = whisper_feature, fps = fps)
+
     ############################################## inference batch by batch ##############################################
-    logging.info("开始推理口型（耗时）...")
+    logging.info("正在推理口型（耗时）...")
 
     video_num = len(whisper_chunks)
     batch_size = args.batch_size
@@ -432,7 +444,7 @@ if __name__ == "__main__":
         download_model()  # for huggingface deployment.
 
         from custom.parallel_method import video_to_img_parallel, frames_in_parallel, write_video
-        
+
         audio_processor, vae, unet, pe = load_all_model()
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         timesteps = torch.tensor([0], device=device)
