@@ -218,10 +218,16 @@ def inference(audio_path, video_path, bbox_shift, output:str = "", progress=gr.P
         latents = vae.get_latents_for_unet(crop_frame)
         input_latent_list.append(latents)
 
-    # to smooth the first and the last frame
-    frame_list_cycle = frame_list + frame_list[::-1]
-    coord_list_cycle = coord_list + coord_list[::-1]
-    input_latent_list_cycle = input_latent_list + input_latent_list[::-1]
+    # to smooth the first and the last frame 
+    # 倒序做法
+    # frame_list_cycle = frame_list + frame_list[::-1]
+    # coord_list_cycle = coord_list + coord_list[::-1]
+    # input_latent_list_cycle = input_latent_list + input_latent_list[::-1]
+
+    # 正序做法
+    frame_list_cycle = frame_list + frame_list[::1]
+    coord_list_cycle = coord_list + coord_list[::1]
+    input_latent_list_cycle = input_latent_list + input_latent_list[::1]
 
     ############################################## extract audio feature ##############################################
     whisper_feature = audio_processor.audio2feat(audio_path)
@@ -232,7 +238,7 @@ def inference(audio_path, video_path, bbox_shift, output:str = "", progress=gr.P
 
     video_num = len(whisper_chunks)
     batch_size = args.batch_size
-    gen = datagen(whisper_chunks,input_latent_list_cycle,batch_size)
+    gen = datagen(whisper_chunks, input_latent_list_cycle, batch_size)
     res_frame_list = []
 
     for i, (whisper_batch,latent_batch) in enumerate(tqdm(gen,total=int(np.ceil(float(video_num)/batch_size)))):
