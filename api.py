@@ -24,7 +24,7 @@ from musetalk.utils.utils import get_file_type,get_video_fps,datagen
 from musetalk.utils.utils import load_all_model
 
 result_output_dir='./results/output'
-result_input_dir='./results/output'
+result_input_dir='./results/input'
 
 
 
