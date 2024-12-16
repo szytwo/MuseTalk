@@ -15,18 +15,15 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.openapi.docs import get_swagger_ui_html
 from fastapi.middleware.cors import CORSMiddleware  #引入 CORS中间件模块
 from contextlib import asynccontextmanager
-from custom.file_utils import logging, delete_old_files_and_folders
+from custom.file_utils import logging, delete_old_files_and_folders, get_filename_noext
 from custom.TextProcessor import TextProcessor
 from custom.Preprocessing import Preprocessing
 from custom.image_utils import read_imgs_parallel
 from custom.ModelManager import ModelManager
-from musetalk.utils.utils import get_file_type,get_video_fps,datagen
-from musetalk.utils.utils import load_all_model
+from musetalk.utils.utils import load_all_model, get_file_type, get_video_fps, datagen
 
 result_output_dir='./results/output'
 result_input_dir='./results/input'
-
-
 
 #@spaces.GPU(duration=600)
 @torch.no_grad()
@@ -37,12 +34,12 @@ def inference(audio_path, video_path, bbox_shift):
     max_workers = os.cpu_count()/2
     logging.info(f"max_workers: {max_workers}")
 
-    input_basename = os.path.basename(video_path).split('.')[0]
-    audio_basename  = os.path.basename(audio_path).split('.')[0]
+    input_basename = f"{get_filename_noext(video_path)}_{bbox_shift}"
+    audio_basename  = get_filename_noext(audio_path)
     output_basename = f"{input_basename}_{audio_basename}"
     result_img_save_path = os.path.join(result_output_dir, output_basename) # related to video & audio inputs
-    crop_coord_save_path = os.path.join(result_output_dir, f"{input_basename}/crop_coord_cache_{bbox_shift}.pkl") # only related to video input
-    bbox_cache_save_path = os.path.join(result_output_dir, f"{input_basename}/bbox_cache_{bbox_shift}.pkl")
+    crop_coord_save_path = os.path.join(result_output_dir, f"{input_basename}/crop_coord_cache.pkl") # only related to video input
+    bbox_cache_save_path = os.path.join(result_output_dir, f"{input_basename}/bbox_cache.pkl")
 
     os.makedirs(result_img_save_path, exist_ok =True)
 

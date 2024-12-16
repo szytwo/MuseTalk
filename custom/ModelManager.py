@@ -55,10 +55,9 @@ class ModelManager:
     def download_model():
         checkpoints_dir = "./models"
 
-        logging.info(checkpoints_dir)
         if not os.path.exists(checkpoints_dir):
             os.makedirs(checkpoints_dir)
-            logging.info("Checkpoint Not Downloaded, start downloading...")
+            logging.info(f"Checkpoint Not Downloaded, start downloading {checkpoints_dir}...")
             tic = time.time()
             snapshot_download(
                 repo_id="TMElyralab/MuseTalk",
