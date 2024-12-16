@@ -62,7 +62,7 @@ class Preprocessing:
         coords_list = []
         landmarks = []
         if upperbondrange != 0:
-            logging.info('get key_landmark and face bounding boxes with the bbox_shift:',upperbondrange)
+            logging.info(f'get key_landmark and face bounding boxes with the bbox_shift: {upperbondrange}')
         else:
             logging.info('get key_landmark and face bounding boxes with the default value')
 
