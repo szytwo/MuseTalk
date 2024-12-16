@@ -16,3 +16,11 @@ def read_imgs_parallel(img_list, max_workers=8):
         frames.extend(results)
 
     return frames
+
+def read_imgs(img_list):
+    frames = []
+    logging.info('reading images...')
+    for img_path in tqdm(img_list):
+        frame = cv2.imread(img_path)
+        frames.append(frame)
+    return frames

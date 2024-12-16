@@ -56,15 +56,6 @@ class Preprocessing:
         landmark_resized = landmark_norm * [new_w, new_h]
         return landmark_resized
 
-    @staticmethod
-    def read_imgs(img_list):
-        frames = []
-        logging.info('reading images...')
-        for img_path in tqdm(img_list):
-            frame = cv2.imread(img_path)
-            frames.append(frame)
-        return frames
-
     def get_landmark_and_bbox(self, img_list, upperbondrange = 0, batch_size_fa = 1):
         frames = read_imgs_parallel(img_list)
         batches = [frames[i:i + batch_size_fa] for i in range(0, len(frames), batch_size_fa)]
