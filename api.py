@@ -1,117 +1,37 @@
-import os
-import time
-import gradio as gr
-import numpy as np
-import requests
+
 import argparse
-import os
 import numpy as np
 import cv2
 import torch
 import glob
 import pickle
 import shutil
-import gdown
-import imageio
 import uvicorn
 from tqdm import tqdm
-from argparse import Namespace
 from moviepy.editor import *
-from huggingface_hub import snapshot_download
 from fastapi import FastAPI, File, UploadFile, Request
 from fastapi.responses import PlainTextResponse, JSONResponse, FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.openapi.docs import get_swagger_ui_html
-from starlette.middleware.cors import CORSMiddleware  #引入 CORS中间件模块
+from fastapi.middleware.cors import CORSMiddleware  #引入 CORS中间件模块
 from contextlib import asynccontextmanager
-from custom.file_utils import logging
+from custom.file_utils import logging, delete_old_files_and_folders
 from custom.TextProcessor import TextProcessor
 from custom.Preprocessing import Preprocessing
 from custom.image_utils import read_imgs_parallel
+from custom.ModelManager import ModelManager
 from musetalk.utils.utils import get_file_type,get_video_fps,datagen
 from musetalk.utils.utils import load_all_model
 
-ProjectDir = os.path.abspath(os.path.dirname(__file__))
-CheckpointsDir = os.path.join(ProjectDir, "models")
-
-def print_directory_contents(path):
-    for child in os.listdir(path):
-        child_path = os.path.join(path, child)
-        if os.path.isdir(child_path):
-            logging.info(child_path)
-
-def download_model():
-    if not os.path.exists(CheckpointsDir):
-        os.makedirs(CheckpointsDir)
-        logging.info("Checkpoint Not Downloaded, start downloading...")
-        tic = time.time()
-        snapshot_download(
-            repo_id="TMElyralab/MuseTalk",
-            local_dir=CheckpointsDir,
-            max_workers=8,
-            local_dir_use_symlinks=True,
-        )
-        # weight
-        os.makedirs(f"{CheckpointsDir}/sd-vae-ft-mse/")
-        snapshot_download(
-            repo_id="stabilityai/sd-vae-ft-mse",
-            local_dir=CheckpointsDir+'/sd-vae-ft-mse',
-            max_workers=8,
-            local_dir_use_symlinks=True,
-        )
-        #dwpose
-        os.makedirs(f"{CheckpointsDir}/dwpose/")
-        snapshot_download(
-            repo_id="yzd-v/DWPose",
-            local_dir=CheckpointsDir+'/dwpose',
-            max_workers=8,
-            local_dir_use_symlinks=True,
-        )
-        #vae
-        url = "https://openaipublic.azureedge.net/main/whisper/models/65147644a518d12f04e32d6f3b26facc3f8dd46e5390956a9424a650c0ce22b9/tiny.pt"
-        response = requests.get(url)
-        # 确保请求成功
-        if response.status_code == 200:
-            # 指定文件保存的位置
-            file_path = f"{CheckpointsDir}/whisper/tiny.pt"
-            os.makedirs(f"{CheckpointsDir}/whisper/")
-            # 将文件内容写入指定位置
-            with open(file_path, "wb") as f:
-                f.write(response.content)
-        else:
-            logging.info(f"请求失败，状态码：{response.status_code}")
-        #gdown face parse
-        url = "https://drive.google.com/uc?id=154JgKpzCPW82qINcVieuPH3fZ2e0P812"
-        os.makedirs(f"{CheckpointsDir}/face-parse-bisent/")
-        file_path = f"{CheckpointsDir}/face-parse-bisent/79999_iter.pth"
-        gdown.download(url, file_path, quiet=False)
-        #resnet
-        url = "https://download.pytorch.org/models/resnet18-5c106cde.pth"
-        response = requests.get(url)
-        # 确保请求成功
-        if response.status_code == 200:
-            # 指定文件保存的位置
-            file_path = f"{CheckpointsDir}/face-parse-bisent/resnet18-5c106cde.pth"
-            # 将文件内容写入指定位置
-            with open(file_path, "wb") as f:
-                f.write(response.content)
-        else:
-            logging.info(f"请求失败，状态码：{response.status_code}")
+result_output_dir='./results/output'
+result_input_dir='./results/output'
 
 
-        toc = time.time()
-
-        logging.info(f"download cost {toc-tic} seconds")
-        print_directory_contents(CheckpointsDir)
-
-    else:
-        logging.info("Already download the model.")
 
 #@spaces.GPU(duration=600)
 @torch.no_grad()
-def inference(audio_path, video_path, bbox_shift, output:str = "", progress=gr.Progress(track_tqdm=True)):
-    args_dict={"result_dir":'./results/output', "fps":25, "batch_size":16, "output_vid_name":'', "use_saved_coord":True} #same with inferenece script
-    args = Namespace(**args_dict)
+def inference(audio_path, video_path, bbox_shift):
+    os.makedirs(result_output_dir, exist_ok =True)
 
     # 获取 CPU 核心数
     max_workers = os.cpu_count()/2
@@ -120,24 +40,21 @@ def inference(audio_path, video_path, bbox_shift, output:str = "", progress=gr.P
     input_basename = os.path.basename(video_path).split('.')[0]
     audio_basename  = os.path.basename(audio_path).split('.')[0]
     output_basename = f"{input_basename}_{audio_basename}"
-    result_img_save_path = os.path.join(args.result_dir, output_basename) # related to video & audio inputs
-    crop_coord_save_path = os.path.join(args.result_dir, f"{input_basename}/crop_coord_cache_{bbox_shift}.pkl") # only related to video input
-    bbox_cache_save_path = os.path.join(args.result_dir, f"{input_basename}/bbox_cache_{bbox_shift}.pkl")
+    result_img_save_path = os.path.join(result_output_dir, output_basename) # related to video & audio inputs
+    crop_coord_save_path = os.path.join(result_output_dir, f"{input_basename}/crop_coord_cache_{bbox_shift}.pkl") # only related to video input
+    bbox_cache_save_path = os.path.join(result_output_dir, f"{input_basename}/bbox_cache_{bbox_shift}.pkl")
 
-    os.makedirs(result_img_save_path,exist_ok =True)
+    os.makedirs(result_img_save_path, exist_ok =True)
 
-    if args.output_vid_name=="":
-        if output:
-            output_vid_name = output
-        else:
-            output_vid_name = os.path.join(args.result_dir, output_basename + ".mp4")
+    if args.output:
+        output_vid_name = args.output
     else:
-        output_vid_name = os.path.join(args.result_dir, args.output_vid_name)
+        output_vid_name = os.path.join(result_output_dir, f"{output_basename}.mp4")
 
     ############################################## extract frames from source video ##############################################
     if get_file_type(video_path)=="video":
-        save_dir_full = os.path.join(args.result_dir, input_basename)
- 
+        save_dir_full = os.path.join(result_output_dir, input_basename)
+
         if os.path.exists(save_dir_full) and args.use_saved_coord:
             logging.info(f"使用视频图像缓存{save_dir_full}")
             fps = get_video_fps(video_path)
@@ -148,12 +65,16 @@ def inference(audio_path, video_path, bbox_shift, output:str = "", progress=gr.P
         input_img_list = sorted(glob.glob(os.path.join(save_dir_full, '*.[jpJP][pnPN]*[gG]')))
     else: # input img folder
         input_img_list = glob.glob(os.path.join(video_path, '*.[jpJP][pnPN]*[gG]'))
-        input_img_list = sorted(input_img_list, key=lambda x: int(os.path.splitext(os.path.basename(x))[0]))
+        input_img_list = sorted(input_img_list) # ['0001.jpg', '0002.jpg']
         fps = args.fps
     #logging.info(input_img_list)
 
     ############################################## preprocess input image  ##############################################
     is_landmark_and_bbox = True
+    bbox_shift_text = None
+    bbox_range = None
+    coord_list = None
+    frame_list = None
 
     if os.path.exists(crop_coord_save_path) and args.use_saved_coord:
         # 加载缓存的 bbox 数据（包括 bbox_shift_text 和 bbox_range）
@@ -184,7 +105,7 @@ def inference(audio_path, video_path, bbox_shift, output:str = "", progress=gr.P
         coord_list, frame_list, bbox_shift_text, bbox_range = preprocessing.get_landmark_and_bbox(
             input_img_list, 
             bbox_shift, 
-            2
+            args.batch_size_fa
         )
 
         with open(crop_coord_save_path, 'wb') as f:
@@ -241,7 +162,7 @@ def inference(audio_path, video_path, bbox_shift, output:str = "", progress=gr.P
     gen = datagen(whisper_chunks, input_latent_list_cycle, batch_size)
     res_frame_list = []
 
-    for i, (whisper_batch,latent_batch) in enumerate(tqdm(gen,total=int(np.ceil(float(video_num)/batch_size)))):
+    for i, (whisper_batch,latent_batch) in enumerate(tqdm(gen,total=int(np.ceil(float(str(video_num))/batch_size)))):
         tensor_list = []
         valid_latents = []
         valid_positions = []
@@ -280,7 +201,7 @@ def inference(audio_path, video_path, bbox_shift, output:str = "", progress=gr.P
     # fps = 25
     # 图片路径
     # 输出视频路径
-    output_video = os.path.join(args.result_dir, output_basename + "_temp.mp4")
+    output_video = os.path.join(result_output_dir, f"{output_basename}_temp.mp4")
     
     input_video, frames = write_video(result_img_save_path, output_video, fps, max_workers)
     
@@ -314,6 +235,9 @@ def inference(audio_path, video_path, bbox_shift, output:str = "", progress=gr.P
 
     # 删除文件夹
     shutil.rmtree(result_img_save_path)
+    # 删除过期文件
+    delete_old_files_and_folders(result_output_dir, 1)
+    delete_old_files_and_folders(result_input_dir, 1)
 
     logging.info(f"result is save to {output_vid_name}")
     logging.info(f"bbox_shift_text: {bbox_shift_text}")
@@ -321,46 +245,12 @@ def inference(audio_path, video_path, bbox_shift, output:str = "", progress=gr.P
 
     return output_vid_name, bbox_shift_text, bbox_range
 
-def check_video(video):
-    if not isinstance(video, str):
-        return video # in case of none type
-    # Define the output video file name
-    dir_path, file_name = os.path.split(video)
-    if file_name.startswith("outputxxx_"):
-        return video
-    # Add the output prefix to the file name
-    output_file_name = "outputxxx_" + file_name
-
-    os.makedirs('./results',exist_ok=True)
-    os.makedirs('./results/output',exist_ok=True)
-    os.makedirs('./results/input',exist_ok=True)
-
-    # Combine the directory path and the new file name
-    output_video = os.path.join('./results/input', output_file_name)
-
-    # # Run the ffmpeg command to change the frame rate to 25fps
-    # command = f"ffmpeg -i {video} -r 25 -vcodec libx264 -vtag hvc1 -pix_fmt yuv420p crf 18   {output_video}  -y"
-
-    # 读取视频
-    reader = imageio.get_reader(video)
-    fps = reader.get_meta_data()['fps']  # 获取原视频的帧率
-    reader.close()
-
-    # 将帧存储在列表中
-    frames = [im for im in reader]
-
-    # 保存视频
-    # NVIDIA 编码器 codec="h264_nvenc"    CPU编码 codec="libx264"
-    imageio.mimwrite(output_video, frames, 'FFMPEG', fps=fps, codec='h264_nvenc', quality=9, pixelformat='yuv420p')
-
-    return output_video
-
 #设置允许访问的域名
 origins = ["*"]  #"*"，即为所有。
 
 # 定义 FastAPI 应用
 @asynccontextmanager
-async def lifespan(app: FastAPI):
+async def lifespan(fapp: FastAPI):
     # 在应用启动时加载模型
     logging.info("Application loaded successfully!")
     yield  # 这里是应用运行的时间段
@@ -440,12 +330,10 @@ async def do(audio:str, video:str, bbox:int = 0):
 
 @app.post('/do')
 async def do(audio:UploadFile = File(...), video:UploadFile = File(...), bbox:int = 0):
-    input_dir = "./results/input"
-
-    os.makedirs(input_dir, exist_ok=True)
+    os.makedirs(result_input_dir, exist_ok=True)
     
-    audio_path = os.path.join(input_dir, audio.filename)
-    video_path = os.path.join(input_dir, video.filename)
+    audio_path = os.path.join(result_input_dir, audio.filename)
+    video_path = os.path.join(result_input_dir, video.filename)
     
     logging.info(f"接收上传audio请求{audio_path}")
     with open(audio_path, "wb") as f:
@@ -460,16 +348,21 @@ async def do(audio:UploadFile = File(...), video:UploadFile = File(...), bbox:in
     output_vid_name, bbox_shift_text, bbox_range = inference(audio_path, video_path, bbox)
 
     relative_path = output_vid_name
-    range = bbox_range
-    json = {"name": os.path.basename(relative_path), "range": range}
+
+    json = {"name": os.path.basename(relative_path), "range": bbox_range}
 
     return JSONResponse(json)
 
 @app.get('/download')
 async def download(name:str):
-    return FileResponse(path = f'results/output/{name}', filename=name, media_type = 'application/octet-stream')
+    return FileResponse(path = os.path.join(result_output_dir, name), filename=name, media_type = 'application/octet-stream')
 
-global audio_processor, vae, unet, pe
+def inference_app():
+    output_vid_name, bbox_shift_text, bbox_range = inference(args.audio, args.video, args.bbox_shift)
+    sname, sext = os.path.splitext(args.output)
+
+    with open(f'{sname}.txt', 'w') as file:
+        file.write(str(bbox_range))
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -479,10 +372,14 @@ if __name__ == "__main__":
     parser.add_argument("--video", type=str, default="")
     parser.add_argument("--output", type=str, default="")
     parser.add_argument("--bbox_shift", type=int, default=0)
+    parser.add_argument("--fps", type=int, default=25)
+    parser.add_argument("--batch_size", type=int, default=16)
+    parser.add_argument("--use_saved_coord", type=bool, default=True)
+    parser.add_argument("--batch_size_fa", type=int, default=2)
     args = parser.parse_args()
 
     try:
-        download_model()  # for huggingface deployment.
+        ModelManager.download_model()  # for huggingface deployment.
 
         from custom.parallel_method import video_to_img_parallel, frames_in_parallel, write_video
 
@@ -495,12 +392,8 @@ if __name__ == "__main__":
         if args.api:
             uvicorn.run(app=app, host="0.0.0.0", port=args.port, workers=1)
         else:
-            output_vid_name, bbox_shift_text, bbox_range = inference(args.audio, args.video, args.bbox_shift, args.output)
-            range = bbox_range
-            sname, sext = os.path.splitext(args.output)
+            inference_app()
 
-            with open(f'{sname}.txt', 'w') as file:
-                file.write(str(range))
     except Exception as e:
         Preprocessing.clear_cuda_cache()
         logging.error(e)
