@@ -105,7 +105,6 @@ def delete_old_files_and_folders(folder_path, days):
 
     now = time.time()
     cutoff_time = now - (days * 86400)  # 时间阈值（秒）
-    logging.info(f"正在删除临时文件（{folder_path}）...")
 
     # 获取所有文件和文件夹
     filepaths = []
@@ -123,6 +122,7 @@ def delete_old_files_and_folders(folder_path, days):
             dir_path = os.path.join(root, dirname)
             dirpaths.append(dir_path)
 
+    logging.info(f"正在检查过期文件并删除（{folder_path}）...")
     # 检查过期文件并删除
     for file_path in tqdm(filepaths, total=len(filepaths)):
         try:
@@ -130,6 +130,8 @@ def delete_old_files_and_folders(folder_path, days):
                 os.remove(file_path)
         except Exception as e:
             logging.error(f"Error deleting file {file_path}: {e}")
+
+    logging.info(f"正在检查并删除空文件夹（{folder_path}）...")
    # 检查并删除空文件夹
     for dir_path in tqdm(dirpaths, total=len(dirpaths)):
         try:
