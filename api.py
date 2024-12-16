@@ -203,7 +203,7 @@ def inference(audio_path, video_path, bbox_shift):
     # 输出视频路径
     output_video = os.path.join(result_output_dir, f"{output_basename}_temp.mp4")
     
-    input_video, frames = write_video(result_img_save_path, output_video, fps, max_workers)
+    input_video = write_video(result_img_save_path, output_video, fps, max_workers)
     
     # Check if the input_video and audio_path exist
     if not os.path.exists(input_video):

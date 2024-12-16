@@ -18,6 +18,7 @@ import json
 import torchaudio
 import logging
 import time
+import shutil
 from tqdm import tqdm
 
 logging.getLogger('matplotlib').setLevel(logging.WARNING)
@@ -70,6 +71,9 @@ def load_wav(wav, target_sr):
 def get_full_path(path):
     return os.path.abspath(path) if not os.path.isabs(path) else path
 
+def get_filename_noext(path):
+    return os.path.splitext(os.path.basename(path))[0]
+
 def add_suffix_to_filename(filename, suffix):
     """ 在文件名中添加后缀 """
     base, ext = os.path.splitext(filename)
@@ -80,6 +84,13 @@ def print_directory_contents(path):
         child_path = os.path.join(path, child)
         if os.path.isdir(child_path):
             logging.info(child_path)
+
+def delete_folder(folder_path):
+    if os.path.exists(folder_path):
+        shutil.rmtree(folder_path)
+        logging.info(f"文件夹 {folder_path} 已被删除。")
+    else:
+        logging.info(f"文件夹 {folder_path} 不存在。")
 
 def delete_old_files_and_folders(folder_path, days):
     """
@@ -94,9 +105,9 @@ def delete_old_files_and_folders(folder_path, days):
 
     now = time.time()
     cutoff_time = now - (days * 86400)  # 时间阈值（秒）
-
+    logging.info(f"正在删除临时文件（{folder_path}）...")
     # 遍历文件夹（自下而上，先处理文件再处理文件夹）
-    for root, dirnames, filenames in os.walk(folder_path, topdown=False):
+    for root, dirnames, filenames in tqdm(os.walk(folder_path, topdown=False)):
         # 删除文件
         for filename in filenames:
             file_path = os.path.join(root, filename)

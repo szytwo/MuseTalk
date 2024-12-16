@@ -1,14 +1,13 @@
-import shutil
 import copy
 import cv2
 import numpy as np
 import re
-
 from moviepy.editor import *
 from tqdm import tqdm
 from concurrent.futures import ThreadPoolExecutor
 from musetalk.utils.blending import get_image
-from custom.file_utils import logging, add_suffix_to_filename
+from custom.file_utils import logging, add_suffix_to_filename, get_filename_noext
+from custom.image_utils import read_imgs_parallel
 
 def convert_video_to_25fps(video_path):
     """ 使用 MoviePy 将视频转换为 25 FPS """
@@ -107,55 +106,39 @@ def frames_in_parallel(res_frame_list, coord_list_cycle, frame_list_cycle, resul
         for future in futures:
             future.result()
 
-def delete_folder(folder_path):
-    if os.path.exists(folder_path):
-        shutil.rmtree(folder_path)
-        logging.info(f"文件夹 {folder_path} 已被删除。")
-    else:
-        logging.info(f"文件夹 {folder_path} 不存在。")
-
-
-def read_image(image_path):
-    return cv2.imread(image_path)
-
-# 并行读取图像并写入视频
-def process_frame(result_img_save_path, file):
-    frame_path = os.path.join(result_img_save_path, file)
-    frame = read_image(frame_path)
-    return frame
+# 检查是否有有效图片
+def is_valid_image(file):
+    pattern = re.compile(r'\d{8}\.png')
+    return pattern.match(file)
 
 def write_video(result_img_save_path, output_video, fps=25, max_workers=8):
     logging.info(f"正在将图像合成视频...")    
     # 检查文件是否存在，若存在则删除
     if os.path.exists(output_video):
         os.remove(output_video)
-    # 检查是否有有效图片
-    def is_valid_image(file):
-        pattern = re.compile(r'\d{8}\.png')
-        return pattern.match(file)
-
-    files = [file for file in os.listdir(result_img_save_path) if is_valid_image(file)]
-    files.sort(key=lambda x: int(x.split('.')[0]))
+    # 获取带完整路径的文件列表
+    files = [
+        os.path.join(result_img_save_path, file)
+        for file in os.listdir(result_img_save_path)
+        if is_valid_image(file)
+    ]
+    # 安全排序，处理文件名可能不是纯数字的情况
+    files.sort(key=lambda x: int(get_filename_noext(x)))
 
     if not files:
         raise ValueError("No valid images found in the specified path.")
 
     # 获取第一张图片的尺寸
-    first_image_path = os.path.join(result_img_save_path, files[0])
+    first_image_path = files[0]
     frame = cv2.imread(first_image_path)
     height, width, _ = frame.shape
 
     # 初始化视频写入器
     fourcc = cv2.VideoWriter_fourcc(*'mp4v')  # 使用 mp4 编码格式
     out = cv2.VideoWriter(output_video, fourcc, fps, (width, height))
-    frames = []
 
     try:
-        logging.info(f"Reading frames...")
-        # 使用 ThreadPoolExecutor 来并行化图像读取
-        with ThreadPoolExecutor(max_workers=max_workers) as executor:
-            # 使用 map 保证顺序一致
-            frames = list(tqdm(executor.map(process_frame, result_img_save_path, files), total=len(files)))
+        frames = read_imgs_parallel(files)
 
         logging.info(f"Writing video...")
         # 将读取到的图像写入视频
@@ -171,4 +154,4 @@ def write_video(result_img_save_path, output_video, fps=25, max_workers=8):
         out.release()
         logging.info(f"视频保存到 {output_video}")
     
-    return output_video, frames
+    return output_video
