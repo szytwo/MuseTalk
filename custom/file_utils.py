@@ -103,7 +103,6 @@ def delete_old_files_and_folders(folder_path, days):
             try:
                 if os.path.isfile(file_path) and os.path.getmtime(file_path) < cutoff_time:
                     os.remove(file_path)
-                    logging.info(f"Deleted file: {file_path}")
             except Exception as e:
                 logging.error(f"Error deleting file {file_path}: {e}")
 
@@ -113,6 +112,5 @@ def delete_old_files_and_folders(folder_path, days):
             try:
                 if os.path.isdir(dir_path) and not os.listdir(dir_path):  # 如果文件夹为空
                     os.rmdir(dir_path)
-                    logging.info(f"Deleted empty folder: {dir_path}")
             except Exception as e:
                 logging.error(f"Error deleting folder {dir_path}: {e}")

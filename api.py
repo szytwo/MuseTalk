@@ -366,15 +366,25 @@ def inference_app():
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
+    # 是否启用 API 模式（布尔类型，默认值为 True）
     parser.add_argument("--api", type=bool, default=True)
+    # 设置服务器端口号（整数类型，默认值为 7862）
     parser.add_argument("--port", type=int, default=7862)
+    # 输入音频文件路径（字符串类型，默认值为空字符串）
     parser.add_argument("--audio", type=str, default="")
+    # 输入视频文件路径（字符串类型，默认值为空字符串）
     parser.add_argument("--video", type=str, default="")
+    # 输出文件夹路径（字符串类型，默认值为空字符串）
     parser.add_argument("--output", type=str, default="")
+    # 边界框的移动偏移量（整数类型，默认值为 0）
     parser.add_argument("--bbox_shift", type=int, default=0)
+    # 视频的目标帧率（整数类型，默认值为 25）
     parser.add_argument("--fps", type=int, default=25)
+    # 推理时的批处理大小（整数类型，默认值为 16）
     parser.add_argument("--batch_size", type=int, default=16)
+    # 是否使用已保存的坐标文件（布尔类型，默认值为 True）
     parser.add_argument("--use_saved_coord", type=bool, default=True)
+    # 面部分析的批处理大小（整数类型，默认值为 2）
     parser.add_argument("--batch_size_fa", type=int, default=2)
     args = parser.parse_args()
 

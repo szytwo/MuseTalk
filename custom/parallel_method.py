@@ -1,15 +1,12 @@
-import os
 import shutil
 import copy
 import cv2
 import numpy as np
-import imageio
 import re
 
 from moviepy.editor import *
 from tqdm import tqdm
 from concurrent.futures import ThreadPoolExecutor
-from musetalk.utils.utils import get_file_type, get_video_fps, datagen
 from musetalk.utils.blending import get_image
 from custom.file_utils import logging, add_suffix_to_filename
 
@@ -100,7 +97,6 @@ def frames_in_parallel(res_frame_list, coord_list_cycle, frame_list_cycle, resul
                 except Exception as e:
                     logging.info(f"处理帧 {i} 时出错: {e}")
                     combine_frame = ori_frame # 出错时采用原图
-                    continue
             else:
                 logging.info(f"帧 {i} 的边界无效: ({width}, {height})")
                 combine_frame = ori_frame # 边界无效时采用原图
@@ -121,6 +117,12 @@ def delete_folder(folder_path):
 
 def read_image(image_path):
     return cv2.imread(image_path)
+
+# 并行读取图像并写入视频
+def process_frame(result_img_save_path, file):
+    frame_path = os.path.join(result_img_save_path, file)
+    frame = read_image(frame_path)
+    return frame
 
 def write_video(result_img_save_path, output_video, fps=25, max_workers=8):
     logging.info(f"正在将图像合成视频...")    
@@ -149,17 +151,11 @@ def write_video(result_img_save_path, output_video, fps=25, max_workers=8):
     frames = []
 
     try:
-        # 并行读取图像并写入视频
-        def process_frame(file):
-            frame_path = os.path.join(result_img_save_path, file)
-            frame = read_image(frame_path)
-            return frame
-
         logging.info(f"Reading frames...")
         # 使用 ThreadPoolExecutor 来并行化图像读取
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
             # 使用 map 保证顺序一致
-            frames = list(tqdm(executor.map(process_frame, files), total=len(files)))
+            frames = list(tqdm(executor.map(process_frame, result_img_save_path, files), total=len(files)))
 
         logging.info(f"Writing video...")
         # 将读取到的图像写入视频
