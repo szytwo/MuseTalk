@@ -220,14 +220,14 @@ def inference(audio_path, video_path, bbox_shift, output:str = "", progress=gr.P
 
     # to smooth the first and the last frame 
     # 倒序做法
-    # frame_list_cycle = frame_list + frame_list[::-1]
-    # coord_list_cycle = coord_list + coord_list[::-1]
-    # input_latent_list_cycle = input_latent_list + input_latent_list[::-1]
+    frame_list_cycle = frame_list + frame_list[::-1]
+    coord_list_cycle = coord_list + coord_list[::-1]
+    input_latent_list_cycle = input_latent_list + input_latent_list[::-1]
 
     # 正序做法
-    frame_list_cycle = frame_list + frame_list[::1]
-    coord_list_cycle = coord_list + coord_list[::1]
-    input_latent_list_cycle = input_latent_list + input_latent_list[::1]
+    # frame_list_cycle = frame_list + frame_list[::1]
+    # coord_list_cycle = coord_list + coord_list[::1]
+    # input_latent_list_cycle = input_latent_list + input_latent_list[::1]
 
     ############################################## extract audio feature ##############################################
     whisper_feature = audio_processor.audio2feat(audio_path)
