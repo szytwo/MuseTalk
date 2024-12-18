@@ -1,5 +1,4 @@
 import numpy as np
-import cv2
 import torch
 
 from mmpose.apis import inference_topdown
@@ -85,23 +84,28 @@ class Preprocessing:
                     coords_list += [self.coord_placeholder] # 如果无脸型，添加占位符
                     continue
                 
-                half_face_coord =  face_land_mark[29]#np.mean([face_land_mark[28], face_land_mark[29]], axis=0)
+                half_face_coord =  face_land_mark[29] #np.mean([face_land_mark[28], face_land_mark[29]], axis=0)
                 range_minus = (face_land_mark[30]- face_land_mark[29])[1]
                 range_plus = (face_land_mark[29]- face_land_mark[28])[1]
                 average_range_minus.append(range_minus)
                 average_range_plus.append(range_plus)
+
                 if upperbondrange != 0:
-                    half_face_coord[1] = upperbondrange+half_face_coord[1] #手动调整  + 向下（偏29）  - 向上（偏28）
-                half_face_dist = np.max(face_land_mark[:,1]) - half_face_coord[1]
-                upper_bond = half_face_coord[1]-half_face_dist
+                    half_face_coord[1] = upperbondrange + half_face_coord[1] #手动调整  + 向下（偏29）  - 向上（偏28）
+
+                half_face_dist = np.max(face_land_mark[:, 1]) - half_face_coord[1]
+                upper_bond = half_face_coord[1] - half_face_dist
                 
-                f_landmark = (np.min(face_land_mark[:, 0]),int(upper_bond),np.max(face_land_mark[:, 0]),np.max(face_land_mark[:,1]))
+                f_landmark = (np.min(face_land_mark[:, 0]), int(upper_bond), np.max(face_land_mark[:, 0]), np.max(face_land_mark[:, 1]))
                 x1, y1, x2, y2 = f_landmark
-                
-                if y2 - y1 <= 0 or x2 - x1 <= 0 or x1 < 0 or y1 < 0: # if the landmark bbox is not suitable, reuse the bbox
+                width, height = x2 - x1, y2 - y1
+
+                if width <= 0 or height <= 0 or x1 < 0 or y1 < 0: # if the landmark bbox is not suitable, reuse the bbox
                     coords_list += [self.coord_placeholder] # 如果无脸型，添加占位符
-                    #w,h = f[2]-f[0], f[3]-f[1]
-                    logging.info(f"error bbox:{f_landmark}")
+                    _x1, _y1, _x2, _y2 = f
+                    _width, _height = _x2 - _x1, _y2 - _y1
+
+                    logging.info(f"error bbox: 「f {f} {_width} {_height}」「f_landmark {f_landmark} {width} {height}」")
                 else:
                     coords_list += [f_landmark]
         

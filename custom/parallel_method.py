@@ -138,9 +138,9 @@ def write_video(result_img_save_path, output_video, fps=25, max_workers=8):
     out = cv2.VideoWriter(output_video, fourcc, fps, (width, height))
 
     try:
-        frames = read_imgs_parallel(files)
+        frames = read_imgs_parallel(files, max_workers)
 
-        logging.info(f"Writing video...")
+        logging.info(f"正在将图像写入视频...")
         # 将读取到的图像写入视频
         for frame in tqdm(frames):
             if frame is not None:
