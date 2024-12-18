@@ -194,7 +194,7 @@ def inference(audio_path, video_path, bbox_shift):
         # 对音频特征进行位置编码
         audio_feature_batch = pe(audio_feature_batch)
         # 将有效的潜在特征转换为张量，并转移到指定的设备上
-        latent_batch = torch.cat(latent_list, dim = 0)
+        latent_batch = torch.stack(latent_list)
         latent_batch = latent_batch.to(device = unet.device,
                                      dtype = unet.model.dtype)
         # 使用 UNet 模型进行推理，生成潜在特征的预测结果
