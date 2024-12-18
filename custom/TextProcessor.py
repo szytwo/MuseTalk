@@ -56,8 +56,12 @@ class TextProcessor:
         timestamp = datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
         # 创建日志文件路径
         log_file_path = os.path.join(log_dir, f'error_{timestamp}.log')
-        # 使用 traceback 模块获取详细的错误信息
-        error_traceback = traceback.format_exc()
+        # 从 exception 获取堆栈信息
+        if exception.__traceback__:
+            error_traceback = ''.join(traceback.format_exception(type(exception), exception, exception.__traceback__))
+        else:
+            error_traceback = "无法获取堆栈信息"
+
         # 写入错误信息到文件
         with open(log_file_path, 'w') as log_file:
             log_file.write(f"错误发生时间: {timestamp}\n")

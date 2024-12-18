@@ -1,4 +1,3 @@
-
 import argparse
 import numpy as np
 import cv2
@@ -188,15 +187,15 @@ def inference(audio_path, video_path, bbox_shift):
         if not whisper_list:
             continue
         # 将音频特征堆叠并转移到指定设备上
-        audio_feature_batch = torch.from_numpy(np.stack(whisper_list))
-        audio_feature_batch = audio_feature_batch.to(device = unet.device,
-                                                     dtype = unet.model.dtype) # torch, B, 5*N,384
+        audio_feature_batch = torch.from_numpy(
+            np.array(whisper_list)
+        ).to(device = unet.device, dtype = unet.model.dtype) # torch, B, 5*N,384
         # 对音频特征进行位置编码
         audio_feature_batch = pe(audio_feature_batch)
         # 将有效的潜在特征转换为张量，并转移到指定的设备上
-        latent_batch = torch.stack(latent_list)
-        latent_batch = latent_batch.to(device = unet.device,
-                                     dtype = unet.model.dtype)
+        latent_batch = torch.stack(
+            latent_list
+        ).to(device = unet.device, dtype = unet.model.dtype)
         # 使用 UNet 模型进行推理，生成潜在特征的预测结果
         pred_latents = unet.model(
             latent_batch,
