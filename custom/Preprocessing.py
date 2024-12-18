@@ -1,5 +1,6 @@
 import numpy as np
 import torch
+import gc
 
 from mmpose.apis import inference_topdown
 from mmpose.structures import merge_data_samples
@@ -32,20 +33,22 @@ class Preprocessing:
     def clear_cuda_cache():
         """
         清理PyTorch的显存和系统内存缓存。
+        注意上下文，如果在异步执行，会导致清理不了
         """
+        logging.info("Clearing GPU memory...")
+        # 强制进行垃圾回收
+        gc.collect()
+
         if torch.cuda.is_available():
-            logging.info("Clearing GPU memory...")
             torch.cuda.empty_cache()
             torch.cuda.ipc_collect()
-
+            # 重置统计信息
+            torch.cuda.reset_peak_memory_stats()
             # 打印显存日志
             logging.info(f"[GPU Memory] Allocated: {torch.cuda.memory_allocated() / (1024 ** 2):.2f} MB")
             logging.info(f"[GPU Memory] Max Allocated: {torch.cuda.max_memory_allocated() / (1024 ** 2):.2f} MB")
             logging.info(f"[GPU Memory] Reserved: {torch.cuda.memory_reserved() / (1024 ** 2):.2f} MB")
             logging.info(f"[GPU Memory] Max Reserved: {torch.cuda.max_memory_reserved() / (1024 ** 2):.2f} MB")
-
-            # 重置统计信息
-            torch.cuda.reset_peak_memory_stats()
 
     @staticmethod
     def resize_landmark(landmark, w, h, new_w, new_h):
@@ -108,8 +111,6 @@ class Preprocessing:
                     logging.info(f"error bbox: 「f {f} {_width} {_height}」「f_landmark {f_landmark} {width} {height}」")
                 else:
                     coords_list += [f_landmark]
-        
-        self.clear_cuda_cache()
 
         bbox_shift_text = f"Total frame:「{len(frames)}」 Manually adjust range : [ -{int(sum(average_range_minus) / len(average_range_minus))}~{int(sum(average_range_plus) / len(average_range_plus))} ] , the current value: {upperbondrange}"
         bbox_range = [-int(sum(average_range_minus) / len(average_range_minus)),int(sum(average_range_plus) / len(average_range_plus))]

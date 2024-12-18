@@ -262,16 +262,7 @@ def inference(audio_path, video_path, bbox_shift):
 #设置允许访问的域名
 origins = ["*"]  #"*"，即为所有。
 
-# 定义 FastAPI 应用
-@asynccontextmanager
-async def lifespan(fapp: FastAPI):
-    # 在应用启动时加载模型
-    logging.info("Application loaded successfully!")
-    yield  # 这里是应用运行的时间段
-    logging.info("Application shutting down...")  # 在这里可以释放资源   
-    Preprocessing.clear_cuda_cache()
-
-app = FastAPI(docs_url=None, lifespan=lifespan)
+app = FastAPI(docs_url=None)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,  #设置允许的origins来源
@@ -289,27 +280,6 @@ async def custom_swagger_ui_html():
         title="Custom Swagger UI",
         swagger_js_url="/static/swagger-ui/5.9.0/swagger-ui-bundle.js",
         swagger_css_url="/static/swagger-ui/5.9.0/swagger-ui.css",
-    )
-
-@app.middleware("http")
-async def clear_gpu_after_request(request: Request, call_next):
-    try:
-        response = await call_next(request)
-        return response
-    finally:
-        Preprocessing.clear_cuda_cache()
-# 自定义异常处理器
-@app.exception_handler(Exception)
-async def global_exception_handler(request: Request, exc: Exception):
-    logging.info(f"Exception during request {request.url}: {exc}")
-
-    Preprocessing.clear_cuda_cache()
-    # 记录错误信息
-    TextProcessor.log_error(exc)
-
-    return JSONResponse(
-        {"errcode": 500, "errmsg": "Internal Server Error"},
-        status_code=500
     )
 
 @app.get("/", response_class=HTMLResponse)
@@ -333,37 +303,55 @@ async def test():
 
 @app.get("/do")
 async def do(audio:str, video:str, bbox:int = 0):
-    output_vid_name, bbox_shift_text, bbox_range = inference(audio, video, bbox)
+    absolute_path = None
 
-    relative_path = output_vid_name
-    absolute_path = os.path.abspath(relative_path)
+    try:
+        output_vid_name, bbox_shift_text, bbox_range = inference(audio, video, bbox)
 
-    logging.info(relative_path, absolute_path)
+        relative_path = output_vid_name
+        absolute_path = os.path.abspath(relative_path)
+
+        logging.info(f"relative_path: {relative_path} absolute_path: {absolute_path}")
+    except Exception as ex:
+        # 记录错误信息
+        TextProcessor.log_error(ex)
+        logging.error(ex)
+    finally:
+        Preprocessing.clear_cuda_cache()
 
     return PlainTextResponse(absolute_path)
 
 @app.post('/do')
 async def do(audio:UploadFile = File(...), video:UploadFile = File(...), bbox:int = 0):
-    os.makedirs(result_input_dir, exist_ok=True)
-    
-    audio_path = os.path.join(result_input_dir, audio.filename)
-    video_path = os.path.join(result_input_dir, video.filename)
-    
-    logging.info(f"接收上传audio请求{audio_path}")
-    with open(audio_path, "wb") as f:
-        f.write(await audio.read())
-        
-    logging.info(f"接收上传video请求{video_path}")
-    with open(video_path, "wb") as f:
-        f.write(await video.read())
+    json = {}
 
-    logging.info(f"开始执行inference")
+    try:
+        os.makedirs(result_input_dir, exist_ok=True)
 
-    output_vid_name, bbox_shift_text, bbox_range = inference(audio_path, video_path, bbox)
+        audio_path = os.path.join(result_input_dir, audio.filename)
+        video_path = os.path.join(result_input_dir, video.filename)
 
-    relative_path = output_vid_name
+        logging.info(f"接收上传audio请求{audio_path}")
+        with open(audio_path, "wb") as f:
+            f.write(await audio.read())
 
-    json = {"name": os.path.basename(relative_path), "range": bbox_range}
+        logging.info(f"接收上传video请求{video_path}")
+        with open(video_path, "wb") as f:
+            f.write(await video.read())
+
+        logging.info(f"开始执行inference")
+
+        output_vid_name, bbox_shift_text, bbox_range = inference(audio_path, video_path, bbox)
+
+        relative_path = output_vid_name
+
+        json = {"name": os.path.basename(relative_path), "range": bbox_range}
+    except Exception as ex:
+        # 记录错误信息
+        TextProcessor.log_error(ex)
+        logging.error(ex)
+    finally:
+        Preprocessing.clear_cuda_cache()
 
     return JSONResponse(json)
 
@@ -372,11 +360,18 @@ async def download(name:str):
     return FileResponse(path = os.path.join(result_output_dir, name), filename=name, media_type = 'application/octet-stream')
 
 def inference_app():
-    output_vid_name, bbox_shift_text, bbox_range = inference(args.audio, args.video, args.bbox_shift)
-    sname, sext = os.path.splitext(args.output)
+    try:
+        output_vid_name, bbox_shift_text, bbox_range = inference(args.audio, args.video, args.bbox_shift)
+        sname, sext = os.path.splitext(args.output)
 
-    with open(f'{sname}.txt', 'w') as file:
-        file.write(str(bbox_range))
+        with open(f'{sname}.txt', 'w') as file:
+            file.write(str(bbox_range))
+    except Exception as ex:
+        # 记录错误信息
+        TextProcessor.log_error(ex)
+        logging.error(ex)
+    finally:
+        Preprocessing.clear_cuda_cache()
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
