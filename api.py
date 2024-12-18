@@ -114,12 +114,18 @@ def inference(audio_path, video_path, bbox_shift):
 
     logging.info("正在提取图像帧潜在特征...")
 
+    # 无效帧或无面部张量占位符
+    input_latent_placeholder = torch.zeros(
+        (1, 8, 32, 32),
+        dtype = unet.model.dtype,
+        device = unet.device
+    )
+
     input_latent_list = []
-    latent_placeholder = torch.zeros((1, 8, 32, 32), dtype=torch.float32).to(unet.device) # 无效帧或无面部张量占位符
 
     for bbox, frame in tqdm(zip(coord_list, frame_list), total = len(coord_list)):
         if bbox == preprocessing.coord_placeholder:
-            input_latent_list.append(latent_placeholder)  # 无效帧或无面部张量添加占位符
+            input_latent_list.append(input_latent_placeholder)  # 无效帧或无面部张量添加占位符
             continue
 
         x1, y1, x2, y2 = bbox
@@ -127,7 +133,7 @@ def inference(audio_path, video_path, bbox_shift):
         # 检查裁剪后的图像是否为空
         if crop_frame.size == 0:
             logging.info(f"error bbox:{bbox}")
-            input_latent_list.append(latent_placeholder)  # 添加占位符
+            input_latent_list.append(input_latent_placeholder)  # 添加占位符
             # 如果为空，跳过这帧
             continue
 
@@ -158,6 +164,12 @@ def inference(audio_path, video_path, bbox_shift):
     batch_size = args.batch_size
     # 创建数据生成器，按照批量大小从 whisper_chunks 和 input_latent_list_cycle 中生成批次数据
     gen = datagen(whisper_chunks, input_latent_list_cycle, batch_size)
+    # 解包后的无效帧或无面部张量占位符
+    latent_placeholder = torch.zeros(
+        (8, 32, 32),
+        dtype = unet.model.dtype,
+        device = unet.device
+    )
     # 初始化保存最终帧的列表
     res_frame_list = []
     # 遍历生成器，按批次处理音频和潜在特征
@@ -166,8 +178,16 @@ def inference(audio_path, video_path, bbox_shift):
         whisper_list = []
         latent_list = []
         position_list = []
+        # 打印 latent_batch 的类型和形状信息
+        # print(f"latent_batch type: {type(latent_batch)}")
+        # print(f"latent_batch shape: {getattr(latent_batch, 'shape', 'Not a Tensor')}")
         # 遍历当前批次中的每一对音频特征和潜在特征
         for j, (w_feat, l_feat) in enumerate(zip(whisper_batch, latent_batch)):
+            # 打印 l_feat 的类型和形状信息
+            # print(l_feat.device, latent_placeholder.device)
+            # print(l_feat.shape, latent_placeholder.shape)
+            # print(l_feat.dtype, latent_placeholder.dtype)
+
             # 如果潜在特征是占位符，表示无效帧或者无面部张量
             if torch.equal(l_feat, latent_placeholder):
                 # 占位符，表示这帧无效，暂时插入 None
