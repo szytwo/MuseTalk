@@ -153,42 +153,60 @@ def inference(audio_path, video_path, bbox_shift):
 
     ############################################## inference batch by batch ##############################################
     logging.info("正在推理口型（耗时）...")
-
+    # 获取视频帧的数量
     video_num = len(whisper_chunks)
+    # 获取批量大小
     batch_size = args.batch_size
+    # 创建数据生成器，按照批量大小从 whisper_chunks 和 input_latent_list_cycle 中生成批次数据
     gen = datagen(whisper_chunks, input_latent_list_cycle, batch_size)
+    # 初始化保存最终帧的列表
     res_frame_list = []
-
-    for i, (whisper_batch,latent_batch) in enumerate(tqdm(gen,total=int(np.ceil(float(str(video_num))/batch_size)))):
-        tensor_list = []
-        valid_latents = []
-        valid_positions = []
-
-        # 收集有效的音频和潜在特征
+    # 遍历生成器，按批次处理音频和潜在特征
+    for i, (whisper_batch,latent_batch) in enumerate(tqdm(gen, total = int(np.ceil(float(str(video_num))/batch_size)))):
+        # 初始化列表，用于保存有效的音频特征和潜在特征
+        whisper_list = []
+        latent_list = []
+        position_list = []
+        # 遍历当前批次中的每一对音频特征和潜在特征
         for j, (w_feat, l_feat) in enumerate(zip(whisper_batch, latent_batch)):
-            if torch.equal(l_feat, latent_placeholder): # 无效帧或无面部张量添加占位符，后面用原图显示
-                # 占位符，保留 None
+            # 如果潜在特征是占位符，表示无效帧或者无面部张量
+            if torch.equal(l_feat, latent_placeholder):
+                # 占位符，表示这帧无效，暂时插入 None
                 res_frame_list.append(None)
+
+                logging.info(f"音频特征 {i}-{j} 无面部，占位符")
             else:
-                tensor_list.append(torch.FloatTensor(w_feat))
-                valid_latents.append(l_feat)
-                valid_positions.append(len(res_frame_list))  # 记录插入位置
-                res_frame_list.append(None)  # 占位，稍后填充
-
-        if not tensor_list:  # 没有有效特征，跳过整个批次
+                # 有效的音频特征，并添加到 whisper_list 中
+                whisper_list.append(w_feat)
+                # 将有效的潜在特征添加到 latent_list 中
+                latent_list.append(l_feat)
+                # 记录有效帧的位置，稍后用于插入解码结果
+                position_list.append(len(res_frame_list))
+                # 占位符，稍后填充有效帧
+                res_frame_list.append(None)
+        # 如果当前批次没有有效的特征，则跳过此批次
+        if not whisper_list:
             continue
-
-        # 将 valid_latents 转换为张量
-        valid_latents_tensor = torch.stack(valid_latents).to(unet.device)
-        # 推理与解码
-        audio_feature_batch = torch.stack(tensor_list).to(unet.device)
+        # 将音频特征堆叠并转移到指定设备上
+        audio_feature_batch = torch.from_numpy(np.stack(whisper_list))
+        audio_feature_batch = audio_feature_batch.to(device = unet.device,
+                                                     dtype = unet.model.dtype) # torch, B, 5*N,384
+        # 对音频特征进行位置编码
         audio_feature_batch = pe(audio_feature_batch)
-        
-        pred_latents = unet.model(valid_latents_tensor, timesteps, encoder_hidden_states=audio_feature_batch).sample
+        # 将有效的潜在特征转换为张量，并转移到指定的设备上
+        latent_batch = torch.cat(latent_list, dim = 0)
+        latent_batch = latent_batch.to(device = unet.device,
+                                     dtype = unet.model.dtype)
+        # 使用 UNet 模型进行推理，生成潜在特征的预测结果
+        pred_latents = unet.model(
+            latent_batch,
+            timesteps,
+            encoder_hidden_states = audio_feature_batch
+        ).sample
+        # 解码潜在特征，生成重建的帧
         recon = vae.decode_latents(pred_latents)
-
-        # 在正确位置插入解码结果
-        for pos, frame in zip(valid_positions, recon):
+        # 将解码后的帧插入到正确的位置
+        for pos, frame in zip(position_list, recon):
             res_frame_list[pos] = frame
             
     ############################################## pad to full image ##############################################

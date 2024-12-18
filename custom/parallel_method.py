@@ -77,14 +77,12 @@ def save_frame(i, combine_frame, result_img_save_path):
 
 def frames_in_parallel(res_frame_list, coord_list_cycle, frame_list_cycle, result_img_save_path, max_workers=8):
     logging.info("正在将语音图像转换为原始视频图像...")
-    # 在主函数中提前深拷贝 frame_list_cycle
-    frame_list_copy = [copy.deepcopy(frame) for frame in frame_list_cycle]
 
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
         futures = []
         for i, res_frame in enumerate(tqdm(res_frame_list)):    
-            bbox = coord_list_cycle[i%(len(coord_list_cycle))]
-            ori_frame = frame_list_copy[i % len(frame_list_copy)]  # 引用深拷贝后的帧
+            bbox = coord_list_cycle[i % len(coord_list_cycle)]
+            ori_frame = copy.deepcopy(frame_list_cycle[i % len(frame_list_cycle)])  # 引用深拷贝后的帧
             x1, y1, x2, y2 = bbox
             width = x2 - x1
             height = y2 - y1
