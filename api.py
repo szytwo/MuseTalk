@@ -415,7 +415,13 @@ if __name__ == "__main__":
     parser.add_argument("--use_saved_coord", type=bool, default=True)
     # 面部分析的批处理大小（整数类型，默认值为 2）
     parser.add_argument("--batch_size_fa", type=int, default=2)
+    # 设置显存比例限制（浮点类型，默认值为 0）
+    parser.add_argument("--cuda_memory", type=float, default=0)
     args = parser.parse_args()
+
+    # 设置显存比例限制
+    if args.cuda_memory > 0:
+        torch.cuda.set_per_process_memory_fraction(args.cuda_memory)
 
     try:
         ModelManager.download_model()  # for huggingface deployment.
