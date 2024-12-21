@@ -421,6 +421,7 @@ if __name__ == "__main__":
 
     # 设置显存比例限制
     if args.cuda_memory > 0:
+        logging.info(f"cuda_memory: {args.cuda_memory}")
         torch.cuda.set_per_process_memory_fraction(args.cuda_memory)
 
     try:
