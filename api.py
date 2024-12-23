@@ -8,12 +8,11 @@ import shutil
 import uvicorn
 from tqdm import tqdm
 from moviepy.editor import *
-from fastapi import FastAPI, File, UploadFile, Request
+from fastapi import FastAPI, File, UploadFile
 from fastapi.responses import PlainTextResponse, JSONResponse, FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.openapi.docs import get_swagger_ui_html
 from fastapi.middleware.cors import CORSMiddleware  #引入 CORS中间件模块
-from contextlib import asynccontextmanager
 from custom.file_utils import logging, delete_old_files_and_folders, get_filename_noext
 from custom.TextProcessor import TextProcessor
 from custom.Preprocessing import Preprocessing
@@ -21,8 +20,8 @@ from custom.image_utils import read_imgs_parallel
 from custom.ModelManager import ModelManager
 from musetalk.utils.utils import load_all_model, get_file_type, get_video_fps, datagen
 
-result_output_dir='./results/output'
 result_input_dir='./results/input'
+result_output_dir='./results/output'
 
 #@spaces.GPU(duration=600)
 @torch.no_grad()
@@ -270,8 +269,8 @@ def inference(audio_path, video_path, bbox_shift):
     # 删除文件夹
     shutil.rmtree(result_img_save_path)
     # 删除过期文件
-    delete_old_files_and_folders(result_output_dir, 1)
     delete_old_files_and_folders(result_input_dir, 1)
+    delete_old_files_and_folders(result_output_dir, 1)
 
     logging.info(f"result is save to {output_vid_name}")
     logging.info(f"bbox_shift_text: {bbox_shift_text}")
