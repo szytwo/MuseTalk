@@ -264,7 +264,7 @@ def inference(audio_path, video_path, bbox_shift):
         
     # Write the output video
     # NVIDIA 编码器 codec="h264_nvenc"    CPU编码 codec="libx264"
-    video_clip.write_videofile(output_vid_name, codec='h264_nvenc', audio_codec='aac',fps=fps)
+    video_clip.write_videofile(output_vid_name, codec='libx264', audio_codec='aac',fps=fps)
 
     # 删除文件夹
     shutil.rmtree(result_img_save_path)
