@@ -8,8 +8,8 @@ models
 results/
 data/audio/*.wav
 data/video/*.mp4
+*.whl
 
-results/
 MFA/
 error/
 venv/
