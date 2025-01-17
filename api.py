@@ -1,27 +1,30 @@
 import argparse
-import numpy as np
-import cv2
-import torch
 import glob
 import pickle
 import shutil
+
+import cv2
+import numpy as np
+import torch
 import uvicorn
-from tqdm import tqdm
-from moviepy.editor import *
 from fastapi import FastAPI, File, UploadFile
+from fastapi.middleware.cors import CORSMiddleware  # 引入 CORS中间件模块
+from fastapi.openapi.docs import get_swagger_ui_html
 from fastapi.responses import PlainTextResponse, JSONResponse, FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
-from fastapi.openapi.docs import get_swagger_ui_html
-from fastapi.middleware.cors import CORSMiddleware  # 引入 CORS中间件模块
-from custom.file_utils import logging, delete_old_files_and_folders, get_filename_noext
-from custom.TextProcessor import TextProcessor
-from custom.Preprocessing import Preprocessing
-from custom.image_utils import read_imgs_parallel
+from moviepy.editor import *
+from tqdm import tqdm
+
 from custom.ModelManager import ModelManager
+from custom.Preprocessing import Preprocessing
+from custom.TextProcessor import TextProcessor
+from custom.file_utils import logging, delete_old_files_and_folders, get_filename_noext
+from custom.image_utils import read_imgs_parallel
 from musetalk.utils.utils import load_all_model, get_file_type, get_video_fps, datagen
 
 result_input_dir = './results/input'
 result_output_dir = './results/output'
+
 
 # @spaces.GPU(duration=600)
 @torch.no_grad()
@@ -252,6 +255,7 @@ def inference(audio_path, video_path, bbox_shift):
 
     return output_video, bbox_shift_text, bbox_range
 
+
 # 设置允许访问的域名
 origins = ["*"]  # "*"，即为所有。
 
@@ -265,6 +269,7 @@ app.add_middleware(
 # 挂载静态文件
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
+
 # 使用本地的 Swagger UI 静态资源
 @app.get("/docs", include_in_schema=False)
 async def custom_swagger_ui_html():
@@ -275,6 +280,7 @@ async def custom_swagger_ui_html():
         swagger_js_url="/static/swagger-ui/5.9.0/swagger-ui-bundle.js",
         swagger_css_url="/static/swagger-ui/5.9.0/swagger-ui.css",
     )
+
 
 @app.get("/", response_class=HTMLResponse)
 async def root():
@@ -291,9 +297,11 @@ async def root():
     </html>
     """
 
+
 @app.get("/test")
 async def test():
     return PlainTextResponse('success')
+
 
 @app.get("/do")
 async def do(audio: str, video: str, bbox: int = 0):
@@ -314,6 +322,7 @@ async def do(audio: str, video: str, bbox: int = 0):
         Preprocessing.clear_cuda_cache()
 
     return PlainTextResponse(absolute_path)
+
 
 @app.post('/do')
 async def do(audio: UploadFile = File(...), video: UploadFile = File(...), bbox: int = 0):
@@ -349,10 +358,12 @@ async def do(audio: UploadFile = File(...), video: UploadFile = File(...), bbox:
 
     return JSONResponse(json)
 
+
 @app.get('/download')
 async def download(name: str):
     return FileResponse(path=os.path.join(result_output_dir, name), filename=name,
                         media_type='application/octet-stream')
+
 
 def inference_app():
     try:
@@ -367,6 +378,7 @@ def inference_app():
         logging.error(ex)
     finally:
         Preprocessing.clear_cuda_cache()
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()

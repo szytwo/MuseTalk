@@ -1,14 +1,16 @@
 import copy
-import cv2
-import numpy as np
 import re
 import subprocess
+from concurrent.futures import ThreadPoolExecutor
+
+import cv2
+import numpy as np
 from moviepy.editor import *
 from tqdm import tqdm
-from concurrent.futures import ThreadPoolExecutor
-from musetalk.utils.blending import get_image
+
 from custom.file_utils import logging, add_suffix_to_filename, get_filename_noext
-from custom.image_utils import read_imgs_parallel
+from musetalk.utils.blending import get_image
+
 
 def convert_video_to_25fps(video_path, video_metadata):
     """ 使用 MoviePy 将视频转换为 25 FPS """
@@ -51,8 +53,10 @@ def convert_video_to_25fps(video_path, video_metadata):
 
     return video_path, fps
 
+
 def save_img(image, save_path):
     imageio.imwrite(save_path, image)
+
 
 def video_to_img_parallel(video_path, save_dir, video_metadata, max_duration=10, max_workers=8):
     os.makedirs(save_dir, exist_ok=True)
@@ -86,6 +90,7 @@ def video_to_img_parallel(video_path, save_dir, video_metadata, max_duration=10,
 
     return save_paths, fps
 
+
 def save_frame(i, combine_frame, result_img_save_path):
     # 保存图片
     output_path = f"{result_img_save_path}/{str(i).zfill(8)}.png"
@@ -93,6 +98,7 @@ def save_frame(i, combine_frame, result_img_save_path):
     cv2.imwrite(output_path, combine_frame)
 
     return output_path
+
 
 def frames_in_parallel(res_frame_list, coord_list_cycle, frame_list_cycle, result_img_save_path, max_workers=8):
     logging.info("正在将语音图像转换为原始视频图像...")
@@ -122,10 +128,12 @@ def frames_in_parallel(res_frame_list, coord_list_cycle, frame_list_cycle, resul
         for future in futures:
             future.result()
 
+
 # 检查是否有有效图片
 def is_valid_image(file):
     pattern = re.compile(r'\d{8}\.png')
     return pattern.match(file)
+
 
 def write_video(result_img_save_path, output_video, fps, audio_path, video_metadata):
     logging.info(f"正在将图像合成视频...")
@@ -181,6 +189,7 @@ def write_video(result_img_save_path, output_video, fps, audio_path, video_metad
         logging.info(f"发生错误: {e}")
 
     return output_video
+
 
 def get_video_metadata(video_path):
     cmd = [
