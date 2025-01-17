@@ -12,7 +12,7 @@ from fastapi import FastAPI, File, UploadFile
 from fastapi.responses import PlainTextResponse, JSONResponse, FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.openapi.docs import get_swagger_ui_html
-from fastapi.middleware.cors import CORSMiddleware  #引入 CORS中间件模块
+from fastapi.middleware.cors import CORSMiddleware  # 引入 CORS中间件模块
 from custom.file_utils import logging, delete_old_files_and_folders, get_filename_noext
 from custom.TextProcessor import TextProcessor
 from custom.Preprocessing import Preprocessing
@@ -20,34 +20,37 @@ from custom.image_utils import read_imgs_parallel
 from custom.ModelManager import ModelManager
 from musetalk.utils.utils import load_all_model, get_file_type, get_video_fps, datagen
 
-result_input_dir='./results/input'
-result_output_dir='./results/output'
+result_input_dir = './results/input'
+result_output_dir = './results/output'
 
-#@spaces.GPU(duration=600)
+# @spaces.GPU(duration=600)
 @torch.no_grad()
 def inference(audio_path, video_path, bbox_shift):
-    os.makedirs(result_output_dir, exist_ok =True)
-
+    os.makedirs(result_output_dir, exist_ok=True)
     # 获取 CPU 核心数
-    max_workers = os.cpu_count()/2
+    max_workers = os.cpu_count() / 2
     logging.info(f"max_workers: {max_workers}")
 
     input_basename = f"{get_filename_noext(video_path)}_{bbox_shift}"
-    audio_basename  = get_filename_noext(audio_path)
+    audio_basename = get_filename_noext(audio_path)
     output_basename = f"{input_basename}_{audio_basename}"
-    result_img_save_path = os.path.join(result_output_dir, output_basename) # related to video & audio inputs
-    crop_coord_save_path = os.path.join(result_output_dir, f"{input_basename}/crop_coord_cache.pkl") # only related to video input
+    result_img_save_path = os.path.join(result_output_dir, output_basename)  # related to video & audio inputs
+    crop_coord_save_path = os.path.join(result_output_dir,
+                                        f"{input_basename}/crop_coord_cache.pkl")  # only related to video input
     bbox_cache_save_path = os.path.join(result_output_dir, f"{input_basename}/bbox_cache.pkl")
 
-    os.makedirs(result_img_save_path, exist_ok =True)
+    os.makedirs(result_img_save_path, exist_ok=True)
 
     if args.output:
-        output_vid_name = args.output
+        output_video = args.output
     else:
-        output_vid_name = os.path.join(result_output_dir, f"{output_basename}.mp4")
+        output_video = os.path.join(result_output_dir, f"{output_basename}.mp4")
 
     ############################################## extract frames from source video ##############################################
-    if get_file_type(video_path)=="video":
+    video_metadata = {}
+
+    if get_file_type(video_path) == "video":
+        video_metadata = get_video_metadata(video_path)
         save_dir_full = os.path.join(result_output_dir, input_basename)
 
         if os.path.exists(save_dir_full) and args.use_saved_coord:
@@ -55,15 +58,15 @@ def inference(audio_path, video_path, bbox_shift):
             fps = get_video_fps(video_path)
         else:
             max_duration = 15
-            _, fps = video_to_img_parallel(video_path, save_dir_full, max_duration, max_workers)
+            _, fps = video_to_img_parallel(video_path, save_dir_full, video_metadata, max_duration, max_workers)
 
         input_img_list = sorted(glob.glob(os.path.join(save_dir_full, '*.[jpJP][pnPN]*[gG]')))
-    else: # input img folder
+    else:  # input img folder
         input_img_list = glob.glob(os.path.join(video_path, '*.[jpJP][pnPN]*[gG]'))
-        input_img_list = sorted(input_img_list) # ['0001.jpg', '0002.jpg']
+        input_img_list = sorted(input_img_list)  # ['0001.jpg', '0002.jpg']
         fps = args.fps
-    #logging.info(input_img_list)
 
+    # logging.info(input_img_list)
     ############################################## preprocess input image  ##############################################
     is_landmark_and_bbox = True
     bbox_shift_text = None
@@ -81,11 +84,11 @@ def inference(audio_path, video_path, bbox_shift):
 
             bbox_shift_text = bbox_cache.get('bbox_shift_text', None)
             bbox_range = bbox_cache.get('bbox_range', None)
-            fps =  bbox_cache.get('fps', fps)
+            fps = bbox_cache.get('fps', fps)
 
             logging.info(f"bbox_shift_text: {bbox_shift_text} bbox_range: {bbox_range} fps: {fps}")
 
-            with open(crop_coord_save_path,'rb') as f:
+            with open(crop_coord_save_path, 'rb') as f:
                 coord_list = pickle.load(f)
 
             frame_list = read_imgs_parallel(input_img_list, max_workers)
@@ -98,8 +101,8 @@ def inference(audio_path, video_path, bbox_shift):
         logging.info("正在提取口型坐标（耗时）...")
 
         coord_list, frame_list, bbox_shift_text, bbox_range = preprocessing.get_landmark_and_bbox(
-            input_img_list, 
-            bbox_shift, 
+            input_img_list,
+            bbox_shift,
             args.batch_size_fa
         )
 
@@ -112,17 +115,16 @@ def inference(audio_path, video_path, bbox_shift):
             pickle.dump(bbox_cache, f)
 
     logging.info("正在提取图像帧潜在特征...")
-
     # 无效帧或无面部张量占位符
     input_latent_placeholder = torch.zeros(
         (1, 8, 32, 32),
-        dtype = unet.model.dtype,
-        device = unet.device
+        dtype=unet.model.dtype,
+        device=unet.device
     )
 
     input_latent_list = []
 
-    for bbox, frame in tqdm(zip(coord_list, frame_list), total = len(coord_list)):
+    for bbox, frame in tqdm(zip(coord_list, frame_list), total=len(coord_list)):
         if bbox == preprocessing.coord_placeholder:
             input_latent_list.append(input_latent_placeholder)  # 无效帧或无面部张量添加占位符
             continue
@@ -136,16 +138,14 @@ def inference(audio_path, video_path, bbox_shift):
             # 如果为空，跳过这帧
             continue
 
-        crop_frame = cv2.resize(crop_frame,(256,256),interpolation = cv2.INTER_LANCZOS4)
+        crop_frame = cv2.resize(crop_frame, (256, 256), interpolation=cv2.INTER_LANCZOS4)
         latents = vae.get_latents_for_unet(crop_frame)
         input_latent_list.append(latents)
-
-    # to smooth the first and the last frame 
+    # to smooth the first and the last frame
     # 倒序做法
     frame_list_cycle = frame_list + frame_list[::-1]
     coord_list_cycle = coord_list + coord_list[::-1]
     input_latent_list_cycle = input_latent_list + input_latent_list[::-1]
-
     # 正序做法
     # frame_list_cycle = frame_list + frame_list[::1]
     # coord_list_cycle = coord_list + coord_list[::1]
@@ -153,7 +153,7 @@ def inference(audio_path, video_path, bbox_shift):
 
     ############################################## extract audio feature ##############################################
     whisper_feature = audio_processor.audio2feat(audio_path)
-    whisper_chunks = audio_processor.feature2chunks(feature_array = whisper_feature, fps = fps)
+    whisper_chunks = audio_processor.feature2chunks(feature_array=whisper_feature, fps=fps)
 
     ############################################## inference batch by batch ##############################################
     logging.info("正在推理口型（耗时）...")
@@ -166,13 +166,14 @@ def inference(audio_path, video_path, bbox_shift):
     # 解包后的无效帧或无面部张量占位符
     latent_placeholder = torch.zeros(
         (8, 32, 32),
-        dtype = unet.model.dtype,
-        device = unet.device
+        dtype=unet.model.dtype,
+        device=unet.device
     )
     # 初始化保存最终帧的列表
     res_frame_list = []
     # 遍历生成器，按批次处理音频和潜在特征
-    for i, (whisper_batch,latent_batch) in enumerate(tqdm(gen, total = int(np.ceil(float(str(video_num))/batch_size)))):
+    for i, (whisper_batch, latent_batch) in enumerate(
+            tqdm(gen, total=int(np.ceil(float(str(video_num)) / batch_size)))):
         # 初始化列表，用于保存有效的音频特征和潜在特征
         whisper_list = []
         latent_list = []
@@ -186,7 +187,6 @@ def inference(audio_path, video_path, bbox_shift):
             # print(l_feat.device, latent_placeholder.device)
             # print(l_feat.shape, latent_placeholder.shape)
             # print(l_feat.dtype, latent_placeholder.dtype)
-
             # 如果潜在特征是占位符，表示无效帧或者无面部张量
             if torch.equal(l_feat, latent_placeholder):
                 # 占位符，表示这帧无效，暂时插入 None
@@ -208,95 +208,63 @@ def inference(audio_path, video_path, bbox_shift):
         # 将音频特征堆叠并转移到指定设备上
         audio_feature_batch = torch.from_numpy(
             np.array(whisper_list)
-        ).to(device = unet.device, dtype = unet.model.dtype) # torch, B, 5*N,384
+        ).to(device=unet.device, dtype=unet.model.dtype)  # torch, B, 5*N,384
         # 对音频特征进行位置编码
         audio_feature_batch = pe(audio_feature_batch)
         # 将有效的潜在特征转换为张量，并转移到指定的设备上
         latent_batch = torch.stack(
             latent_list
-        ).to(device = unet.device, dtype = unet.model.dtype)
+        ).to(device=unet.device, dtype=unet.model.dtype)
         # 使用 UNet 模型进行推理，生成潜在特征的预测结果
         pred_latents = unet.model(
             latent_batch,
             timesteps,
-            encoder_hidden_states = audio_feature_batch
+            encoder_hidden_states=audio_feature_batch
         ).sample
         # 解码潜在特征，生成重建的帧
         recon = vae.decode_latents(pred_latents)
         # 将解码后的帧插入到正确的位置
         for pos, frame in zip(position_list, recon):
             res_frame_list[pos] = frame
-            
-    ############################################## pad to full image ##############################################
-    frames_in_parallel(res_frame_list, coord_list_cycle, frame_list_cycle, result_img_save_path, max_workers)    
 
-    # 帧率
-    # fps = 25
-    # 图片路径
-    # 输出视频路径
-    output_video = os.path.join(result_output_dir, f"{output_basename}_temp.mp4")
-    
-    input_video = write_video(result_img_save_path, output_video, fps, max_workers)
-    
-    # Check if the input_video and audio_path exist
-    if not os.path.exists(input_video):
-        raise FileNotFoundError(f"Input video file not found: {input_video}")
+    ############################################## pad to full image ##############################################
+    frames_in_parallel(res_frame_list, coord_list_cycle, frame_list_cycle, result_img_save_path, max_workers)
+
     if not os.path.exists(audio_path):
         raise FileNotFoundError(f"Audio file not found: {audio_path}")
-    
-    # 读取视频
-    reader = imageio.get_reader(input_video)
-    fps = reader.get_meta_data()['fps']  # 获取原视频的帧率
-    reader.close()
-
-    # Load the video
-    video_clip = VideoFileClip(input_video)
-
-    # Load the audio
-    audio_clip = AudioFileClip(audio_path)
-
-    # Set the audio to the video
-    video_clip = video_clip.set_audio(audio_clip)
-
     # 检查文件是否存在，若存在则删除
-    if os.path.exists(output_vid_name):
-        os.remove(output_vid_name)
-        
-    # Write the output video
-    # NVIDIA 编码器 codec="h264_nvenc"    CPU编码 codec="libx264"
-    video_clip.write_videofile(
-        output_vid_name,
-        codec='libx264',
-        fps=fps,
-        audio_codec='aac',
-        audio_bitrate='192k',
-        preset='slow'
-    )
+    if os.path.exists(output_video):
+        os.remove(output_video)
 
+    output_video = write_video(result_img_save_path, output_video, fps, audio_path, video_metadata)
+
+    if not os.path.exists(output_video):
+        raise FileNotFoundError(f"Input video file not found: {output_video}")
     # 删除文件夹
     shutil.rmtree(result_img_save_path)
     # 删除过期文件
     delete_old_files_and_folders(result_input_dir, 1)
     delete_old_files_and_folders(result_output_dir, 1)
 
-    logging.info(f"result is save to {output_vid_name}")
+    logging.info(f"result is save to {output_video}")
     logging.info(f"bbox_shift_text: {bbox_shift_text}")
     logging.info(f"bbox_range: {bbox_range}")
 
-    return output_vid_name, bbox_shift_text, bbox_range
+    return output_video, bbox_shift_text, bbox_range
 
-#设置允许访问的域名
-origins = ["*"]  #"*"，即为所有。
+# 设置允许访问的域名
+origins = ["*"]  # "*"，即为所有。
 
 app = FastAPI(docs_url=None)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,  #设置允许的origins来源
+    allow_origins=origins,  # 设置允许的origins来源
     allow_credentials=True,
     allow_methods=["*"],  # 设置允许跨域的http方法，比如 get、post、put等。
-    allow_headers=["*"])  #允许跨域的headers，可以用来鉴别来源等作用。
+    allow_headers=["*"])  # 允许跨域的headers，可以用来鉴别来源等作用。
 # 挂载静态文件
 app.mount("/static", StaticFiles(directory="static"), name="static")
+
 # 使用本地的 Swagger UI 静态资源
 @app.get("/docs", include_in_schema=False)
 async def custom_swagger_ui_html():
@@ -328,13 +296,13 @@ async def test():
     return PlainTextResponse('success')
 
 @app.get("/do")
-async def do(audio:str, video:str, bbox:int = 0):
+async def do(audio: str, video: str, bbox: int = 0):
     absolute_path = None
 
     try:
-        output_vid_name, bbox_shift_text, bbox_range = inference(audio, video, bbox)
+        output_video, bbox_shift_text, bbox_range = inference(audio, video, bbox)
 
-        relative_path = output_vid_name
+        relative_path = output_video
         absolute_path = os.path.abspath(relative_path)
 
         logging.info(f"relative_path: {relative_path} absolute_path: {absolute_path}")
@@ -348,7 +316,7 @@ async def do(audio:str, video:str, bbox:int = 0):
     return PlainTextResponse(absolute_path)
 
 @app.post('/do')
-async def do(audio:UploadFile = File(...), video:UploadFile = File(...), bbox:int = 0):
+async def do(audio: UploadFile = File(...), video: UploadFile = File(...), bbox: int = 0):
     json = {}
 
     try:
@@ -367,9 +335,9 @@ async def do(audio:UploadFile = File(...), video:UploadFile = File(...), bbox:in
 
         logging.info(f"开始执行inference")
 
-        output_vid_name, bbox_shift_text, bbox_range = inference(audio_path, video_path, bbox)
+        output_video, bbox_shift_text, bbox_range = inference(audio_path, video_path, bbox)
 
-        relative_path = output_vid_name
+        relative_path = output_video
 
         json = {"name": os.path.basename(relative_path), "range": bbox_range}
     except Exception as ex:
@@ -382,12 +350,13 @@ async def do(audio:UploadFile = File(...), video:UploadFile = File(...), bbox:in
     return JSONResponse(json)
 
 @app.get('/download')
-async def download(name:str):
-    return FileResponse(path = os.path.join(result_output_dir, name), filename=name, media_type = 'application/octet-stream')
+async def download(name: str):
+    return FileResponse(path=os.path.join(result_output_dir, name), filename=name,
+                        media_type='application/octet-stream')
 
 def inference_app():
     try:
-        output_vid_name, bbox_shift_text, bbox_range = inference(args.audio, args.video, args.bbox_shift)
+        output_video, bbox_shift_text, bbox_range = inference(args.audio, args.video, args.bbox_shift)
         sname, sext = os.path.splitext(args.output)
 
         with open(f'{sname}.txt', 'w') as file:
@@ -437,7 +406,7 @@ if __name__ == "__main__":
 
         ModelManager.download_model()  # for huggingface deployment.
 
-        from custom.parallel_method import video_to_img_parallel, frames_in_parallel, write_video
+        from custom.parallel_method import video_to_img_parallel, frames_in_parallel, write_video, get_video_metadata
 
         audio_processor, vae, unet, pe = load_all_model()
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
