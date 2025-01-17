@@ -8,50 +8,50 @@ import numpy as np
 from moviepy.editor import *
 from tqdm import tqdm
 
-from custom.file_utils import logging, add_suffix_to_filename, get_filename_noext
+from custom.TextProcessor import TextProcessor
+from custom.file_utils import logging, add_suffix_to_filename
 from musetalk.utils.blending import get_image
 
 
 def convert_video_to_25fps(video_path, video_metadata):
     """ 使用 MoviePy 将视频转换为 25 FPS """
     # 检查视频帧率
-    video_clip = VideoFileClip(video_path)
-    fps = video_clip.fps
+    r_frame_rate = video_metadata.get("r_frame_rate", "25/1")
+    original_fps = eval(r_frame_rate.strip())  # 将字符串帧率转换为浮点数
+    target_fps = 25
 
-    if fps != 25:
-        logging.info(f"视频帧率为 {fps}，转换为 25 FPS")
-        # 提取关键颜色信息
-        pix_fmt = video_metadata.get("pix_fmt", "yuv420p")
-        color_range = video_metadata.get("color_range", "tv")
-        color_space = video_metadata.get("color_space", "bt470bg")
-        color_transfer = video_metadata.get("color_transfer", "smpte170m")
-        color_primaries = video_metadata.get("color_primaries", "bt470bg")
+    if original_fps != target_fps:
+        logging.info(f"视频帧率为 {original_fps}，转换为 25 FPS")
+        converted_video_path = add_suffix_to_filename(video_path, f"_{target_fps}")
 
-        fps = 25
-        converted_video_path = add_suffix_to_filename(video_path, f"_{fps}")
-        # NVIDIA 编码器 codec="h264_nvenc"    CPU编码 codec="libx264"
-        video_clip.set_fps(fps).write_videofile(
-            converted_video_path,
-            codec="libx264",
-            audio_codec="aac",
-            audio_bitrate="192k",
-            preset="slow",
-            ffmpeg_params=[
-                "-crf", "18",
-                "-pix_fmt", pix_fmt,
-                "-color_range", color_range,
-                "-colorspace", color_space,
-                "-color_trc", color_transfer,
-                "-color_primaries", color_primaries
+        # 使用 FFmpeg 转换帧率
+        try:
+            # NVIDIA 编码器 codec="h264_nvenc"    CPU编码 codec="libx264"
+            # 创建 FFmpeg 命令来合成视频
+            cmd = [
+                "ffmpeg",
+                "-i", video_path,
+                "-r", f"{target_fps}",  # 设置输出帧率
+                "-c:v", "libx264",  # 使用 libx264 编码器
+                "-crf", "18",  # 设置压缩质量
+                "-preset", "slow",  # 设置编码速度/质量平衡
+                "-c:a", "aac",  # 设置音频编码器
+                "-b:a", "192k",  # 设置音频比特率
+                converted_video_path
             ]
-        )
-        video_path = converted_video_path
+            # 执行 FFmpeg 命令
+            subprocess.run(cmd, capture_output=True, text=True, check=True)
 
-        logging.info(f"视频转换完成: {video_path}")
-
-    video_clip.close()
-
-    return video_path, fps
+            logging.info(f"视频转换完成: {converted_video_path}")
+            return converted_video_path, target_fps
+        except subprocess.CalledProcessError as e:
+            # 捕获任何在处理过程中发生的异常
+            ex = Exception(f"Error during ffmpeg: {e.stderr}")
+            TextProcessor.log_error(ex)
+            return None, None
+    else:
+        logging.info("视频帧率已经是 25 FPS，无需转换")
+        return video_path, original_fps
 
 
 def save_img(image, save_path):
@@ -140,53 +140,44 @@ def write_video(result_img_save_path, output_video, fps, audio_path, video_metad
     # 检查文件是否存在，若存在则删除
     if os.path.exists(output_video):
         os.remove(output_video)
-    # 获取带完整路径的文件列表
-    files = [
-        os.path.join(result_img_save_path, file)
-        for file in os.listdir(result_img_save_path)
-        if is_valid_image(file)
-    ]
-    # 安全排序，处理文件名可能不是纯数字的情况
-    files.sort(key=lambda x: int(get_filename_noext(x)))
-
-    if not files:
-        raise ValueError("No valid images found in the specified path.")
 
     try:
         # 提取关键颜色信息
         pix_fmt = video_metadata.get("pix_fmt", "yuv420p")
-        color_range = video_metadata.get("color_range", "tv")
-        color_space = video_metadata.get("color_space", "bt470bg")
-        color_transfer = video_metadata.get("color_transfer", "smpte170m")
-        color_primaries = video_metadata.get("color_primaries", "bt470bg")
-        # 使用 ImageSequenceClip 创建视频剪辑
-        video_clip = ImageSequenceClip(files, fps=fps)
-        # 加载音频剪辑
-        audio_clip = AudioFileClip(audio_path)
-        # 为视频添加音频
-        video_clip = video_clip.set_audio(audio_clip)
-        # 保存为视频文件
-        # NVIDIA 编码器 codec="h264_nvenc"    CPU编码 codec="libx264"
-        video_clip.write_videofile(
-            output_video,
-            codec='libx264',
-            fps=fps,
-            audio_codec='aac',
-            audio_bitrate='192k',
-            preset='slow',
-            ffmpeg_params=[
-                "-crf", "18",
-                "-pix_fmt", pix_fmt,
-                "-color_range", color_range,
-                "-colorspace", color_space,
-                "-color_trc", color_transfer,
-                "-color_primaries", color_primaries
-            ]
-        )
+        color_range = video_metadata.get("color_range", "1")
+        color_space = video_metadata.get("color_space", "1")
+        color_transfer = video_metadata.get("color_transfer", "1")
+        color_primaries = video_metadata.get("color_primaries", "1")
+
+        # 将图像序列转换为视频
+        img_sequence_str = os.path.join(result_img_save_path, "%08d.png")  # 8位数字格式
+        # 创建 FFmpeg 命令来合成视频
+        cmd = [
+            "ffmpeg",
+            "-framerate", str(fps),  # 设置帧率
+            "-i", img_sequence_str,  # 图像序列
+            "-i", audio_path,  # 音频文件
+            "-c:v", "libx264",  # 使用 x264 编码
+            "-pix_fmt", pix_fmt,  # 设置像素格式
+            "-color_range", color_range,  # 设置色彩范围
+            "-colorspace", color_space,  # 设置色彩空间
+            "-color_trc", color_transfer,  # 设置色彩传递特性
+            "-color_primaries", color_primaries,  # 设置色彩基准
+            "-c:a", "aac",  # 使用 AAC 编码音频
+            "-b:a", "192k",  # 设置音频比特率
+            "-preset", "slow",  # 设置编码器预设
+            "-crf", "18",  # 设置 CRF 值来控制视频质量
+            output_video  # 输出文件路径
+        ]
+
+        # 执行 FFmpeg 命令
+        subprocess.run(cmd, capture_output=True, text=True, check=True)
 
         logging.info(f"视频保存到 {output_video}")
-    except Exception as e:
-        logging.info(f"发生错误: {e}")
+    except subprocess.CalledProcessError as e:
+        # 捕获任何在处理过程中发生的异常
+        ex = Exception(f"Error ffmpeg: {e.stderr}")
+        TextProcessor.log_error(ex)
 
     return output_video
 
