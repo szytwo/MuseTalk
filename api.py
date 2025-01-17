@@ -267,9 +267,10 @@ def inference(audio_path, video_path, bbox_shift):
     video_clip.write_videofile(
         output_vid_name,
         codec='libx264',
-        audio_codec='aac',
         fps=fps,
-        audio_bitrate='192k'
+        audio_codec='aac',
+        audio_bitrate='192k',
+        preset='slow'
     )
 
     # 删除文件夹
