@@ -264,7 +264,13 @@ def inference(audio_path, video_path, bbox_shift):
         
     # Write the output video
     # NVIDIA 编码器 codec="h264_nvenc"    CPU编码 codec="libx264"
-    video_clip.write_videofile(output_vid_name, codec='libx264', audio_codec='aac',fps=fps)
+    video_clip.write_videofile(
+        output_vid_name,
+        codec='libx264',
+        audio_codec='aac',
+        fps=fps,
+        audio_bitrate='192k'
+    )
 
     # 删除文件夹
     shutil.rmtree(result_img_save_path)
@@ -424,6 +430,10 @@ if __name__ == "__main__":
         torch.cuda.set_per_process_memory_fraction(args.cuda_memory)
 
     try:
+        # 删除过期文件
+        delete_old_files_and_folders(result_input_dir, 0)
+        delete_old_files_and_folders(result_output_dir, 0)
+
         ModelManager.download_model()  # for huggingface deployment.
 
         from custom.parallel_method import video_to_img_parallel, frames_in_parallel, write_video
