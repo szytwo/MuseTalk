@@ -46,7 +46,7 @@ def convert_video_to_25fps(video_path, video_metadata):
             return converted_video_path, target_fps
         except subprocess.CalledProcessError as e:
             # 捕获任何在处理过程中发生的异常
-            ex = Exception(f"Error during ffmpeg: {e.stderr}")
+            ex = Exception(f"Error ffmpeg: {e.stderr}")
             TextProcessor.log_error(ex)
             return None, None
     else:

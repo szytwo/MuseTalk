@@ -74,4 +74,4 @@ class TextProcessor:
             log_file.write("堆栈信息:\n")
             log_file.write(error_traceback + '\n')
 
-        logging.info(f"发生错误错: {str(exception)}\n误信息已保存至: {log_file_path}")
+        logging.info(f"发生错误: {str(exception)}\n错误信息已保存至: {log_file_path}")
