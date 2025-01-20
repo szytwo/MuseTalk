@@ -39,6 +39,7 @@ def convert_video_to_25fps(video_path, video_metadata):
                 "-b:a", "192k",  # 设置音频比特率
                 "-ar", "44100",
                 "-ac", "2",
+                "-y",
                 converted_video_path
             ]
             # 执行 FFmpeg 命令
@@ -83,6 +84,7 @@ def video_to_img_parallel(video_path, save_dir, max_duration=10, fps=25):
             "-vf", f"fps={fps}",  # 设置输出帧率
             "-q:v", "2",  # 输出质量（PNG 的情况下无效，JPEG 可用）
             "-start_number", "0",  # 从 0 开始编号
+            "-y",
             output_pattern  # 输出图片序列的文件模式
         ]
         # 执行 FFmpeg 命令
@@ -177,6 +179,7 @@ def write_video(result_img_save_path, output_video, fps, audio_path, video_metad
             "-ac", "2",
             "-preset", "slow",  # 设置编码器预设
             "-crf", "18",  # 设置 CRF 值来控制视频质量
+            "-y",
             output_video  # 输出文件路径
         ]
 
