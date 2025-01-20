@@ -37,6 +37,8 @@ def convert_video_to_25fps(video_path, video_metadata):
                 "-preset", "slow",  # 设置编码速度/质量平衡
                 "-c:a", "aac",  # 设置音频编码器
                 "-b:a", "192k",  # 设置音频比特率
+                "-ar", "44100",
+                "-ac", "2",
                 converted_video_path
             ]
             # 执行 FFmpeg 命令
@@ -58,37 +60,43 @@ def save_img(image, save_path):
     imageio.imwrite(save_path, image)
 
 
-def video_to_img_parallel(video_path, save_dir, video_metadata, max_duration=10, max_workers=8):
-    os.makedirs(save_dir, exist_ok=True)
+def video_to_img_parallel(video_path, save_dir, max_duration=10, fps=25):
+    """
+      使用 FFmpeg 从视频中提取帧并保存为图片。
 
-    video_path, fps = convert_video_to_25fps(video_path, video_metadata)
+      :param video_path: 输入视频文件路径
+      :param save_dir: 帧图像保存目录
+      :param max_duration: 提取的最大视频时长（秒）
+      :param fps: 提取帧的帧率
+      :return: 保存的图片路径列表
+      """
+    logging.info(f"正在读取视频的前 {max_duration} 秒...")
 
-    reader = imageio.get_reader(video_path)
-    frame_count = reader.count_frames()
+    try:
+        os.makedirs(save_dir, exist_ok=True)
+        output_pattern = os.path.join(save_dir, "%08d.png")  # 保存为零填充8位的序列图片
+        # FFmpeg 命令
+        cmd = [
+            "ffmpeg",
+            "-i", video_path,  # 输入视频
+            "-t", str(max_duration),  # 截取前 max_duration 秒
+            "-vf", f"fps={fps}",  # 设置输出帧率
+            "-q:v", "2",  # 输出质量（PNG 的情况下无效，JPEG 可用）
+            "-start_number", "0",  # 从 0 开始编号
+            output_pattern  # 输出图片序列的文件模式
+        ]
+        # 执行 FFmpeg 命令
+        subprocess.run(cmd, capture_output=True, text=True, check=True)
+        # 返回所有保存图片的路径
+        save_paths = sorted([os.path.join(save_dir, f) for f in os.listdir(save_dir) if f.endswith(".png")])
 
-    max_frames = int(fps * max_duration)  # 计算前10秒的帧数
-    total_frames = min(frame_count, max_frames)  # 确保不超过总帧数
-
-    # save_paths = [os.path.join(save_dir, f"{i:08d}.png") for i in range(total_frames)]
-    save_paths = []
-    logging.info(f"正在读取视频的前 {max_duration} 秒 ({total_frames} 帧)...")
-    with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        futures = []
-        for i, frame in enumerate(tqdm(reader, total=total_frames)):
-            if i >= max_frames:  # 停止读取超过前10秒的帧
-                break
-            save_path = os.path.join(save_dir, f"{i:08d}.png")
-            save_paths.append(save_path)
-            futures.append(executor.submit(save_img, frame, save_path))
-
-        logging.info("等待所有帧保存完成...")
-        # 显式等待所有任务完成
-        for future in tqdm(futures):
-            future.result()
-
-    logging.info(f"所有帧已保存至 {save_dir}")
-
-    return save_paths, fps
+        logging.info(f"所有帧已保存至 {save_dir}")
+        return save_paths, fps
+    except subprocess.CalledProcessError as e:
+        # 捕获任何在处理过程中发生的异常
+        ex = Exception(f"Error ffmpeg: {e.stderr}")
+        TextProcessor.log_error(ex)
+    return None, None
 
 
 def save_frame(i, combine_frame, result_img_save_path):
@@ -165,6 +173,8 @@ def write_video(result_img_save_path, output_video, fps, audio_path, video_metad
             "-color_primaries", color_primaries,  # 设置色彩基准
             "-c:a", "aac",  # 使用 AAC 编码音频
             "-b:a", "192k",  # 设置音频比特率
+            "-ar", "44100",
+            "-ac", "2",
             "-preset", "slow",  # 设置编码器预设
             "-crf", "18",  # 设置 CRF 值来控制视频质量
             output_video  # 输出文件路径
