@@ -1,5 +1,4 @@
 import copy
-import re
 import subprocess
 from concurrent.futures import ThreadPoolExecutor
 
@@ -55,10 +54,6 @@ def convert_video_to_25fps(video_path, video_metadata):
     else:
         logging.info("视频帧率已经是 25 FPS，无需转换")
         return video_path, original_fps
-
-
-def save_img(image, save_path):
-    imageio.imwrite(save_path, image)
 
 
 def video_to_img_parallel(video_path, save_dir, max_duration=10, fps=25):
@@ -137,12 +132,6 @@ def frames_in_parallel(res_frame_list, coord_list_cycle, frame_list_cycle, resul
         # 等待所有任务完成
         for future in futures:
             future.result()
-
-
-# 检查是否有有效图片
-def is_valid_image(file):
-    pattern = re.compile(r'\d{8}\.png')
-    return pattern.match(file)
 
 
 def write_video(result_img_save_path, output_video, fps, audio_path, video_metadata):
