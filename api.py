@@ -51,7 +51,9 @@ def inference(audio_path, video_path, bbox_shift):
 
     ############################################## extract frames from source video ##############################################
     video_metadata = {}
-
+    input_img_list = []
+    fps = 25
+    
     if get_file_type(video_path) == "video":
         video_metadata = get_video_metadata(video_path)
         save_dir_full = os.path.join(result_output_dir, input_basename)
@@ -59,11 +61,13 @@ def inference(audio_path, video_path, bbox_shift):
         if os.path.exists(save_dir_full) and args.use_saved_coord:
             logging.info(f"使用视频图像缓存{save_dir_full}")
             fps = get_video_fps(video_path)
-        else:
+            input_img_list = sorted(glob.glob(os.path.join(save_dir_full, '*.[jpJP][pnPN]*[gG]')))
+
+        if len(input_img_list) == 0:
             max_duration = 15
             _, fps = video_to_img_parallel(video_path, save_dir_full, max_duration)
+            input_img_list = sorted(glob.glob(os.path.join(save_dir_full, '*.[jpJP][pnPN]*[gG]')))
 
-        input_img_list = sorted(glob.glob(os.path.join(save_dir_full, '*.[jpJP][pnPN]*[gG]')))
     else:  # input img folder
         input_img_list = glob.glob(os.path.join(video_path, '*.[jpJP][pnPN]*[gG]'))
         input_img_list = sorted(input_img_list)  # ['0001.jpg', '0002.jpg']
