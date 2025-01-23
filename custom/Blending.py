@@ -4,7 +4,6 @@ import cv2
 import numpy as np
 from PIL import Image
 
-from custom.file_utils import logging
 from musetalk.utils.face_parsing import FaceParsing
 
 fp = FaceParsing()
@@ -29,12 +28,12 @@ def calc_dynamic_blur_kernel(face_size, image_size, base_ratio=0.001, max_ratio=
     # 根据动态比例计算模糊核大小，确保为奇数
     blur_kernel_size = int(dynamic_ratio * face_width // 2 * 2) + 1
 
-    logging.info(
-        f"face_size: {face_size},"
-        f"image_size: {image_size},"
-        f"dynamic_ratio: {dynamic_ratio},"
-        f"blur_kernel_size: {blur_kernel_size}"
-    )
+    # logging.info(
+    #     f"face_size: {face_size},"
+    #     f"image_size: {image_size},"
+    #     f"dynamic_ratio: {dynamic_ratio},"
+    #     f"blur_kernel_size: {blur_kernel_size}"
+    # )
 
     return blur_kernel_size
 
