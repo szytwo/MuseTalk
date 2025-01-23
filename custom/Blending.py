@@ -28,7 +28,7 @@ def calc_dynamic_blur_kernel(face_size, image_size, base_ratio=0.005, max_ratio=
     # 根据动态比例计算模糊核大小，确保为奇数
     blur_kernel_size = int(dynamic_ratio * face_width // 2 * 2) + 1
 
-    # logging.info(
+    # print(
     #     f"face_size: {face_size},"
     #     f"image_size: {image_size},"
     #     f"dynamic_ratio: {dynamic_ratio},"
