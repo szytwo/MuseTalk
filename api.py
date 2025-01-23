@@ -53,7 +53,7 @@ def inference(audio_path, video_path, bbox_shift):
     video_metadata = {}
     input_img_list = []
     fps = 25
-    
+
     if get_file_type(video_path) == "video":
         video_metadata = get_video_metadata(video_path)
         save_dir_full = os.path.join(result_output_dir, input_basename)
@@ -64,8 +64,8 @@ def inference(audio_path, video_path, bbox_shift):
             input_img_list = sorted(glob.glob(os.path.join(save_dir_full, '*.[jpJP][pnPN]*[gG]')))
 
         if len(input_img_list) == 0:
-            max_duration = 15
-            _, fps = video_to_img_parallel(video_path, save_dir_full, max_duration)
+            max_duration = 20
+            _, fps = video_to_img_parallel(audio_path, video_path, save_dir_full, max_duration)
             input_img_list = sorted(glob.glob(os.path.join(save_dir_full, '*.[jpJP][pnPN]*[gG]')))
 
     else:  # input img folder

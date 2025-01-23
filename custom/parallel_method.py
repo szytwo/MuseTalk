@@ -5,11 +5,28 @@ from concurrent.futures import ThreadPoolExecutor
 import cv2
 import numpy as np
 from moviepy.editor import *
+from pydub.utils import mediainfo
 from tqdm import tqdm
 
 from custom.Blending import get_image
 from custom.TextProcessor import TextProcessor
 from custom.file_utils import logging, add_suffix_to_filename
+
+
+def get_media_duration(media_path):
+    """
+    获取媒体文件（音频或视频）的总时长（秒）。
+
+    :param media_path: 媒体文件路径
+    :return: 媒体文件的时长（秒），如果失败返回 None
+    """
+    try:
+        info = mediainfo(media_path)
+        duration = float(info.get("duration"))
+        return duration
+    except Exception as e:
+        logging.error(f"无法获取媒体时长: {e}")
+        return None
 
 
 def convert_video_to_25fps(video_path, video_metadata):
@@ -56,19 +73,31 @@ def convert_video_to_25fps(video_path, video_metadata):
         return video_path, original_fps
 
 
-def video_to_img_parallel(video_path, save_dir, max_duration=10, fps=25):
+def video_to_img_parallel(audio_path, video_path, save_dir, max_duration=15.0, fps=25):
     """
       使用 FFmpeg 从视频中提取帧并保存为图片。
 
+      :param audio_path: 输入音频文件路径，用于动态调整 max_duration
       :param video_path: 输入视频文件路径
       :param save_dir: 帧图像保存目录
       :param max_duration: 提取的最大视频时长（秒）
       :param fps: 提取帧的帧率
       :return: 保存的图片路径列表
       """
-    logging.info(f"正在读取视频的前 {max_duration} 秒...")
 
     try:
+        # 获取音频和视频的时长
+        audio_duration = get_media_duration(audio_path)
+        video_duration = get_media_duration(video_path)
+
+        if audio_duration is not None:
+            max_duration = min(max_duration, audio_duration)
+
+        if video_duration is not None:
+            max_duration = min(max_duration, video_duration)
+
+        logging.info(f"正在读取视频的前 {max_duration} 秒...")
+
         os.makedirs(save_dir, exist_ok=True)
         output_pattern = os.path.join(save_dir, "%08d.png")  # 保存为零填充8位的序列图片
         # FFmpeg 命令

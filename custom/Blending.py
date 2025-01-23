@@ -9,6 +9,28 @@ from musetalk.utils.face_parsing import FaceParsing
 fp = FaceParsing()
 
 
+def calc_dynamic_blur_kernel(face_size, image_size, base_ratio=0.001, max_ratio=0.15):
+    """
+    动态计算模糊核大小
+    :param face_size: 人脸区域的宽度或高度 (tuple: width, height)
+    :param image_size: 原图的宽度或高度 (tuple: width, height)
+    :param base_ratio: 最低模糊比例
+    :param max_ratio: 最高模糊比例
+    :return: 动态模糊核大小 (奇数)
+    """
+    face_width, face_height = face_size
+    image_width, image_height = image_size
+
+    # 计算人脸宽度占原图宽度的比例
+    face_ratio = face_width / image_width
+    # 根据比例限制动态调整模糊系数
+    dynamic_ratio = base_ratio + (max_ratio - base_ratio) * min(1.0, face_ratio)
+    # 根据动态比例计算模糊核大小，确保为奇数
+    blur_kernel_size = int(dynamic_ratio * face_width // 2 * 2) + 1
+
+    return blur_kernel_size
+
+
 def get_crop_box(box, expand):
     x, y, x1, y1 = box
     x_c, y_c = (x + x1) // 2, (y + y1) // 2
@@ -55,7 +77,10 @@ def get_image(image, face, face_box, upper_boundary_ratio=0.5, expand=1.2):
     modified_mask_image = Image.new('L', ori_shape, 0)
     modified_mask_image.paste(mask_image.crop((0, top_boundary, width, height)), (0, top_boundary))
 
-    blur_kernel_size = int(0.1 * ori_shape[0] // 2 * 2) + 1
+    # 动态调整模糊核大小
+    image_size = (image.shape[1], image.shape[0])  # 原图大小 (width, height)
+    blur_kernel_size = calc_dynamic_blur_kernel(ori_shape, image_size)
+
     mask_array = cv2.GaussianBlur(np.array(modified_mask_image), (blur_kernel_size, blur_kernel_size), 0)
     mask_image = Image.fromarray(mask_array)
 
