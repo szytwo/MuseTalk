@@ -7,9 +7,9 @@ import numpy as np
 from moviepy.editor import *
 from tqdm import tqdm
 
+from custom.Blending import get_image
 from custom.TextProcessor import TextProcessor
 from custom.file_utils import logging, add_suffix_to_filename
-from musetalk.utils.blending import get_image
 
 
 def convert_video_to_25fps(video_path, video_metadata):
