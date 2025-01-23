@@ -9,7 +9,7 @@ from musetalk.utils.face_parsing import FaceParsing
 fp = FaceParsing()
 
 
-def calc_dynamic_blur_kernel(face_size, image_size, base_ratio=0.001, max_ratio=0.15):
+def calc_dynamic_blur_kernel(face_size, image_size, base_ratio=0.005, max_ratio=0.15):
     """
     动态计算模糊核大小
     :param face_size: 人脸区域的宽度或高度 (tuple: width, height)
