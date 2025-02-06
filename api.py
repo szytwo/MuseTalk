@@ -28,15 +28,15 @@ result_output_dir = './results/output'
 
 # @spaces.GPU(duration=600)
 @torch.no_grad()
-def inference(audio_path, video_path, bbox_shift):
+def inference(audio_path, video_path, bbox_shift, fps=60):
     os.makedirs(result_output_dir, exist_ok=True)
     # 获取 CPU 核心数
     max_workers = os.cpu_count() / 2
     logging.info(f"max_workers: {max_workers}")
 
-    input_basename = f"{get_filename_noext(video_path)}_{bbox_shift}"
+    input_basename = f"{get_filename_noext(video_path)}_{bbox_shift}_{fps}"
     audio_basename = get_filename_noext(audio_path)
-    output_basename = f"{input_basename}_{audio_basename}"
+    output_basename = f"{input_basename}_{audio_basename}_{fps}"
     result_img_save_path = os.path.join(result_output_dir, output_basename)  # related to video & audio inputs
     crop_coord_save_path = os.path.join(result_output_dir,
                                         f"{input_basename}/crop_coord_cache.pkl")  # only related to video input
@@ -52,7 +52,6 @@ def inference(audio_path, video_path, bbox_shift):
     ############################################## extract frames from source video ##############################################
     video_metadata = {}
     input_img_list = []
-    fps = 25
 
     if get_file_type(video_path) == "video":
         video_metadata = get_video_metadata(video_path)
@@ -65,7 +64,7 @@ def inference(audio_path, video_path, bbox_shift):
 
         if len(input_img_list) == 0:
             max_duration = 20
-            _, fps = video_to_img_parallel(audio_path, video_path, save_dir_full, max_duration)
+            _, fps = video_to_img_parallel(audio_path, video_path, save_dir_full, max_duration, fps)
             input_img_list = sorted(glob.glob(os.path.join(save_dir_full, '*.[jpJP][pnPN]*[gG]')))
 
     else:  # input img folder
@@ -308,11 +307,11 @@ async def test():
 
 
 @app.get("/do")
-async def do(audio: str, video: str, bbox: int = 0):
+async def do(audio: str, video: str, bbox: int = 0, fps: int = 60):
     absolute_path = None
 
     try:
-        output_video, bbox_shift_text, bbox_range = inference(audio, video, bbox)
+        output_video, bbox_shift_text, bbox_range = inference(audio, video, bbox, fps)
 
         relative_path = output_video
         absolute_path = os.path.abspath(relative_path)
@@ -329,7 +328,7 @@ async def do(audio: str, video: str, bbox: int = 0):
 
 
 @app.post('/do')
-async def do(audio: UploadFile = File(...), video: UploadFile = File(...), bbox: int = 0):
+async def do(audio: UploadFile = File(...), video: UploadFile = File(...), bbox: int = 0, fps: int = 60):
     json = {}
 
     try:
@@ -348,7 +347,7 @@ async def do(audio: UploadFile = File(...), video: UploadFile = File(...), bbox:
 
         logging.info(f"开始执行inference")
 
-        output_video, bbox_shift_text, bbox_range = inference(audio_path, video_path, bbox)
+        output_video, bbox_shift_text, bbox_range = inference(audio_path, video_path, bbox, fps)
 
         relative_path = output_video
 
@@ -371,7 +370,7 @@ async def download(name: str):
 
 def inference_app():
     try:
-        output_video, bbox_shift_text, bbox_range = inference(args.audio, args.video, args.bbox_shift)
+        output_video, bbox_shift_text, bbox_range = inference(args.audio, args.video, args.bbox_shift, args.fps)
         sname, sext = os.path.splitext(args.output)
 
         with open(f'{sname}.txt', 'w') as file:
