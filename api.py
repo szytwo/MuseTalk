@@ -264,9 +264,11 @@ def inference_with_timeout(audio_path, video_path, bbox_shift, fps=30):
     """
     执行inference，带超时，防止卡死
     """
+    timeout_sec = 3600  # 超时时间
+    
     try:
         output_video, bbox_shift_text, bbox_range = func_timeout(
-            60,  # 超时时间
+            timeout_sec,
             inference,
             kwargs={
                 "audio_path": audio_path,
@@ -277,7 +279,7 @@ def inference_with_timeout(audio_path, video_path, bbox_shift, fps=30):
         )
         return output_video, bbox_shift_text, bbox_range
     except FunctionTimedOut:
-        raise Exception("inference 执行超时")
+        raise Exception(f"inference 执行超时 {timeout_sec}s")
 
 
 # 设置允许访问的域名
@@ -328,7 +330,7 @@ async def test():
 
 
 @app.get("/do")
-async def do(audio: str, video: str, bbox: int = 0, fps: int = 30):
+async def do(audio: str, video: str, bbox: int = 0, fps: int = 60):
     absolute_path = None
 
     try:
@@ -349,7 +351,7 @@ async def do(audio: str, video: str, bbox: int = 0, fps: int = 30):
 
 
 @app.post('/do')
-async def do(audio: UploadFile = File(...), video: UploadFile = File(...), bbox: int = 0, fps: int = 30):
+async def do(audio: UploadFile = File(...), video: UploadFile = File(...), bbox: int = 0, fps: int = 60):
     json = {}
 
     try:
