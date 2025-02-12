@@ -12,6 +12,7 @@ from fastapi.middleware.cors import CORSMiddleware  # 引入 CORS中间件模块
 from fastapi.openapi.docs import get_swagger_ui_html
 from fastapi.responses import PlainTextResponse, JSONResponse, FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
+from func_timeout import func_timeout, FunctionTimedOut
 from moviepy.editor import *
 from tqdm import tqdm
 
@@ -28,7 +29,7 @@ result_output_dir = './results/output'
 
 # @spaces.GPU(duration=600)
 @torch.no_grad()
-def inference(audio_path, video_path, bbox_shift, fps=60):
+def inference(audio_path, video_path, bbox_shift, fps=30):
     os.makedirs(result_output_dir, exist_ok=True)
     # 获取 CPU 核心数
     max_workers = os.cpu_count() / 2
@@ -259,6 +260,26 @@ def inference(audio_path, video_path, bbox_shift, fps=60):
     return output_video, bbox_shift_text, bbox_range
 
 
+def inference_with_timeout(audio_path, video_path, bbox_shift, fps=30):
+    """
+    执行inference，带超时，防止卡死
+    """
+    try:
+        output_video, bbox_shift_text, bbox_range = func_timeout(
+            60,  # 超时时间
+            inference,
+            kwargs={
+                "audio_path": audio_path,
+                "video_path": video_path,
+                "bbox_shift": bbox_shift,
+                "fps": fps,
+            },
+        )
+        return output_video, bbox_shift_text, bbox_range
+    except FunctionTimedOut:
+        raise Exception("inference 执行超时")
+
+
 # 设置允许访问的域名
 origins = ["*"]  # "*"，即为所有。
 
@@ -307,11 +328,11 @@ async def test():
 
 
 @app.get("/do")
-async def do(audio: str, video: str, bbox: int = 0, fps: int = 60):
+async def do(audio: str, video: str, bbox: int = 0, fps: int = 30):
     absolute_path = None
 
     try:
-        output_video, bbox_shift_text, bbox_range = inference(audio, video, bbox, fps)
+        output_video, bbox_shift_text, bbox_range = inference_with_timeout(audio, video, bbox, fps)
 
         relative_path = output_video
         absolute_path = os.path.abspath(relative_path)
@@ -328,7 +349,7 @@ async def do(audio: str, video: str, bbox: int = 0, fps: int = 60):
 
 
 @app.post('/do')
-async def do(audio: UploadFile = File(...), video: UploadFile = File(...), bbox: int = 0, fps: int = 60):
+async def do(audio: UploadFile = File(...), video: UploadFile = File(...), bbox: int = 0, fps: int = 30):
     json = {}
 
     try:
@@ -347,7 +368,7 @@ async def do(audio: UploadFile = File(...), video: UploadFile = File(...), bbox:
 
         logging.info(f"开始执行inference")
 
-        output_video, bbox_shift_text, bbox_range = inference(audio_path, video_path, bbox, fps)
+        output_video, bbox_shift_text, bbox_range = inference_with_timeout(audio_path, video_path, bbox, fps)
 
         relative_path = output_video
 
@@ -370,7 +391,8 @@ async def download(name: str):
 
 def inference_app():
     try:
-        output_video, bbox_shift_text, bbox_range = inference(args.audio, args.video, args.bbox_shift, args.fps)
+        output_video, bbox_shift_text, bbox_range = inference_with_timeout(args.audio, args.video, args.bbox_shift,
+                                                                           args.fps)
         sname, sext = os.path.splitext(args.output)
 
         with open(f'{sname}.txt', 'w') as file:

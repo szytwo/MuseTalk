@@ -21,3 +21,5 @@ gradio
 spaces
 moviepy
 langdetect
+
+func-timeout
