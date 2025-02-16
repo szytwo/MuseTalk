@@ -223,5 +223,5 @@ def get_video_metadata(video_path):
         if "=" in line:
             key, value = line.split("=", 1)
             metadata[key.strip()] = value.strip()
-    logging.info(metadata)
+    # logging.info(metadata)
     return metadata

@@ -92,7 +92,7 @@ class Audio2Feature():
                 audio_feat_length=audio_feat_length,
                 fps=fps
             )
-            print(f"i:{i},selected_idx {selected_idx}")
+            # print(f"i:{i},selected_idx {selected_idx}")
 
             whisper_chunks.append(selected_feature)
 
