@@ -30,7 +30,8 @@ class Audio2Feature():
         selected_feature = []
         selected_idx = []
 
-        center_idx = int(vid_idx * 50 / fps)
+        # 修改点1：使用round四舍五入计算中心索引
+        center_idx = int(round(vid_idx * 50 / fps))
         left_idx = center_idx - audio_feat_length[0] * 2
         right_idx = center_idx + (audio_feat_length[1] + 1) * 2
 
@@ -58,7 +59,8 @@ class Audio2Feature():
         selected_idx = []
 
         for dt in range(-audio_feat_length[0], audio_feat_length[1] + 1):
-            left_idx = int((vid_idx + dt) * 50 / fps)
+            # 修改点2：使用round计算左索引
+            left_idx = int(round((vid_idx + dt) * 50 / fps))
             if left_idx < 1 or left_idx > length - 1:
                 left_idx = max(0, left_idx)
                 left_idx = min(length - 1, left_idx)
@@ -80,18 +82,19 @@ class Audio2Feature():
 
     def feature2chunks(self, feature_array, fps, audio_feat_length=[2, 2]):
         whisper_chunks = []
-        whisper_idx_multiplier = 50. / fps
-        i = 0
-        print(f"video in {fps} FPS, audio idx in 50FPS")
-        while 1:
-            start_idx = int(i * whisper_idx_multiplier)
-            selected_feature, selected_idx = self.get_sliced_feature(feature_array=feature_array, vid_idx=i,
-                                                                     audio_feat_length=audio_feat_length, fps=fps)
-            # print(f"i:{i},selected_idx {selected_idx}")
+        # 修改点3：根据总特征数计算视频帧总数
+        total_video_frames = int(len(feature_array) * fps / 50) + 1
+
+        for i in range(total_video_frames):
+            selected_feature, selected_idx = self.get_sliced_feature(
+                feature_array=feature_array,
+                vid_idx=i,
+                audio_feat_length=audio_feat_length,
+                fps=fps
+            )
+            print(f"i:{i},selected_idx {selected_idx}")
+
             whisper_chunks.append(selected_feature)
-            i += 1
-            if start_idx > len(feature_array):
-                break
 
         return whisper_chunks
 
