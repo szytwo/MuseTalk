@@ -1,9 +1,8 @@
 import copy
-import subprocess
-from concurrent.futures import ThreadPoolExecutor
-
 import cv2
 import numpy as np
+import subprocess
+from concurrent.futures import ThreadPoolExecutor
 from moviepy.editor import *
 from pydub.utils import mediainfo
 from tqdm import tqdm
@@ -177,6 +176,14 @@ def write_video(result_img_save_path, output_video, fps, audio_path, video_metad
         color_transfer = video_metadata.get("color_transfer", "1")
         color_primaries = video_metadata.get("color_primaries", "1")
 
+        if color_space.lower() == "reserved":
+            color_space = "bt709"
+            logging.warning(f"检测到 color_space 为 'reserved'，已替换为默认值 'bt709'")
+
+        if color_primaries.lower() == "reserved":
+            color_primaries = "bt709"
+            logging.warning(f"检测到 color_primaries 为 'reserved'，已替换为默认值 'bt709'")
+
         # 将图像序列转换为视频
         img_sequence_str = os.path.join(result_img_save_path, "%08d.png")  # 8位数字格式
         # 创建 FFmpeg 命令来合成视频
@@ -200,7 +207,6 @@ def write_video(result_img_save_path, output_video, fps, audio_path, video_metad
             "-y",
             output_video  # 输出文件路径
         ]
-
         # 执行 FFmpeg 命令
         subprocess.run(cmd, capture_output=True, text=True, check=True)
 
