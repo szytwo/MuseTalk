@@ -84,8 +84,8 @@ class Audio2Feature():
         whisper_chunks = []
         # 修改点3：根据总特征数计算视频帧总数
         total_video_frames = int(len(feature_array) * fps / 50) + 1
-        
-        print(f"video in {fps} FPS, audio idx in 50FPS")
+
+        print(f"video in {fps} FPS, audio idx in 50FPS, total_video_frames {total_video_frames}")
 
         for i in range(total_video_frames):
             selected_feature, selected_idx = self.get_sliced_feature(
