@@ -1,8 +1,9 @@
 import copy
-import cv2
-import numpy as np
 import subprocess
 from concurrent.futures import ThreadPoolExecutor
+
+import cv2
+import numpy as np
 from moviepy.editor import *
 from pydub.utils import mediainfo
 from tqdm import tqdm
@@ -72,7 +73,13 @@ def convert_video_to_25fps(video_path, video_metadata):
         return video_path, original_fps
 
 
-def video_to_img_parallel(audio_path, video_path, save_dir, max_duration=15.0, fps=25):
+def video_to_img_parallel(
+        audio_path: str,
+        video_path: str,
+        save_dir: str,
+        max_duration: float = 20.0,
+        fps: int = 25
+):
     """
       使用 FFmpeg 从视频中提取帧并保存为图片。
 
