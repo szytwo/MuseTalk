@@ -29,15 +29,21 @@ result_output_dir = './results/output'
 
 # @spaces.GPU(duration=600)
 @torch.no_grad()
-def inference(audio_path, video_path, bbox_shift, fps=30):
+def inference(
+        audio_path: str,
+        video_path: str,
+        bbox_shift: int,
+        fps: int = 25,
+        max_duration: int = 20
+):
     os.makedirs(result_output_dir, exist_ok=True)
     # 获取 CPU 核心数
     max_workers = os.cpu_count() / 2
     logging.info(f"max_workers: {max_workers}")
 
-    input_basename = f"{get_filename_noext(video_path)}_{bbox_shift}_{fps}"
+    input_basename = f"{get_filename_noext(video_path)}_{bbox_shift}_{fps}_{max_duration}"
     audio_basename = get_filename_noext(audio_path)
-    output_basename = f"{input_basename}_{audio_basename}_{fps}"
+    output_basename = f"{input_basename}_{audio_basename}_{fps}_{max_duration}"
     result_img_save_path = os.path.join(result_output_dir, output_basename)  # related to video & audio inputs
     crop_coord_save_path = os.path.join(result_output_dir,
                                         f"{input_basename}/crop_coord_cache.pkl")  # only related to video input
@@ -64,7 +70,6 @@ def inference(audio_path, video_path, bbox_shift, fps=30):
             input_img_list = sorted(glob.glob(os.path.join(save_dir_full, '*.[jpJP][pnPN]*[gG]')))
 
         if len(input_img_list) == 0:
-            max_duration = 20
             _, fps = video_to_img_parallel(audio_path, video_path, save_dir_full, max_duration, fps)
             input_img_list = sorted(glob.glob(os.path.join(save_dir_full, '*.[jpJP][pnPN]*[gG]')))
 
@@ -260,12 +265,18 @@ def inference(audio_path, video_path, bbox_shift, fps=30):
     return output_video, bbox_shift_text, bbox_range
 
 
-def inference_with_timeout(audio_path, video_path, bbox_shift, fps=30):
+def inference_with_timeout(
+        audio_path: str,
+        video_path: str,
+        bbox_shift: int,
+        fps: int = 25,
+        max_duration: int = 20
+):
     """
     执行inference，带超时，防止卡死
     """
     timeout_sec = 3600  # 超时时间
-    
+
     try:
         output_video, bbox_shift_text, bbox_range = func_timeout(
             timeout_sec,
@@ -275,6 +286,7 @@ def inference_with_timeout(audio_path, video_path, bbox_shift, fps=30):
                 "video_path": video_path,
                 "bbox_shift": bbox_shift,
                 "fps": fps,
+                "max_duration": max_duration
             },
         )
         return output_video, bbox_shift_text, bbox_range
@@ -330,11 +342,17 @@ async def test():
 
 
 @app.get("/do")
-async def do(audio: str, video: str, bbox: int = 0, fps: int = 60):
+async def do(
+        audio: str,
+        video: str,
+        bbox: int = 0,
+        fps: int = 25,
+        max_duration: int = 20
+):
     absolute_path = None
 
     try:
-        output_video, bbox_shift_text, bbox_range = inference_with_timeout(audio, video, bbox, fps)
+        output_video, bbox_shift_text, bbox_range = inference_with_timeout(audio, video, bbox, fps, max_duration)
 
         relative_path = output_video
         absolute_path = os.path.abspath(relative_path)
@@ -351,7 +369,13 @@ async def do(audio: str, video: str, bbox: int = 0, fps: int = 60):
 
 
 @app.post('/do')
-async def do(audio: UploadFile = File(...), video: UploadFile = File(...), bbox: int = 0, fps: int = 60):
+async def do(
+        audio: UploadFile = File(...),
+        video: UploadFile = File(...),
+        bbox: int = 0,
+        fps: int = 25,
+        max_duration: int = 20
+):
     json = {}
 
     try:
@@ -370,7 +394,9 @@ async def do(audio: UploadFile = File(...), video: UploadFile = File(...), bbox:
 
         logging.info(f"开始执行inference")
 
-        output_video, bbox_shift_text, bbox_range = inference_with_timeout(audio_path, video_path, bbox, fps)
+        (output_video,
+         bbox_shift_text,
+         bbox_range) = inference_with_timeout(audio_path, video_path, bbox, fps, max_duration)
 
         relative_path = output_video
 
