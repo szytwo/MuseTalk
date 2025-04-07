@@ -1,8 +1,7 @@
-# 使用 PyTorch 官方 CUDA 12.1 运行时镜像
+# 使用 PyTorch 官方 CUDA 运行时镜像
 # https://hub.docker.com/r/pytorch/pytorch/tags
-FROM pytorch/pytorch:2.3.1-cuda12.1-cudnn8-runtime
+FROM pytorch/pytorch:2.0.1-cuda11.7-cudnn8-runtime
 
-ARG PYTHONPATH=""
 # 替换软件源为清华镜像
 RUN sed -i 's|archive.ubuntu.com|mirrors.tuna.tsinghua.edu.cn|g' /etc/apt/sources.list && \
     sed -i 's|security.ubuntu.com|mirrors.tuna.tsinghua.edu.cn|g' /etc/apt/sources.list
@@ -41,6 +40,7 @@ RUN tar -xJf ffmpeg-6.0.1-amd64-static.tar.xz -C /usr/local \
 
 # 设置 FFmpeg 到环境变量
 ENV PATH="/usr/local/ffmpeg:${PATH}"
+ENV FFMPEG_PATH="/usr/local/ffmpeg"
 
 # RUN ffmpeg -version
 
@@ -50,30 +50,20 @@ WORKDIR /code
 # 将项目源代码复制到容器中
 COPY . /code
 
-ENV PYTHONPATH="${PYTHONPATH}:/code:/code/third_party/Matcha-TTS"
 # 升级 pip 并安装 Python 依赖：
-RUN conda install -y -c conda-forge pynini==2.1.5
-
-WORKDIR /code/wheels/linux
-
 RUN pip install --upgrade pip -i https://pypi.tuna.tsinghua.edu.cn/simple \
-    && pip install onnxruntime_gpu-1.18.0-cp310-cp310-manylinux_2_28_x86_64.whl -i https://pypi.tuna.tsinghua.edu.cn/simple
-
-WORKDIR /code/pretrained_models/CosyVoice-ttsfrd
-
-RUN unzip resource.zip -d . \
-    && pip install ttsfrd_dependency-0.1-py3-none-any.whl -i https://pypi.tuna.tsinghua.edu.cn/simple \
-    && pip install ttsfrd-0.4.2-cp310-cp310-linux_x86_64.whl -i https://pypi.tuna.tsinghua.edu.cn/simple
-
-WORKDIR /code
-
-RUN pip install -r api_requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple  \
+    && pip install -r api_requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple  \
+    && pip install --no-cache-dir -U openmim -i https://pypi.tuna.tsinghua.edu.cn/simple \
+    && mim install mmengine \
+    && mim install "mmcv==2.0.1" \
+    && mim install "mmdet==3.1.0" \
+    && mim install "mmpose==1.1.0" \
     && rm -rf wheels
 
 # 暴露容器端口
 EXPOSE 22
 EXPOSE 80
-EXPOSE 9987
+EXPOSE 7862
 
 # 容器启动时执行 api.py
 # CMD ["python", "api.py"]

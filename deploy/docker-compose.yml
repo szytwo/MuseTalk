@@ -3,21 +3,20 @@ networks:
     driver: bridge
 
 services:
-  cosyvoice:
-    image: cosyvoice:1.0
-    container_name: cosyvoice
+  musetalk:
+    image: musetalk:1.0
+    container_name: musetalk
     restart: always
     runtime: nvidia
     privileged: true
     volumes:
-      - d:/AI/CosyVoice/results:/code/results
-      - d:/AI/CosyVoice/error:/code/error
-      - d:/AI/CosyVoice/logs:/code/logs
+      - d:/AI/MuseTalk/results:/code/results
+      - d:/AI/MuseTalk/error:/code/error
+      - d:/AI/MuseTalk/logs:/code/logs
     environment:
       - TQDM_DISABLE=1 # 全局关闭进度条显示
       - PYTHONUNBUFFERED=1 # 取消标准输出缓冲
-      - CUDA_VISIBLE_DEVICES=1
-      - ASR_URL=http://host.docker.internal:7868/api/v1/asr
+      - CUDA_VISIBLE_DEVICES=0
       - PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:1024
     tty: true  # 分配伪终端
     deploy:
@@ -26,9 +25,9 @@ services:
           devices:
             - driver: nvidia
               capabilities: [ gpu ]
-    shm_size: '16g'
+    shm_size: '32g'
     ports:
-      - '9987:9987'
-    command: python /code/api.py --port 9987
+      - '7862:7862'
+    command: python /code/api.py
     networks:
       - ai_network
