@@ -1,0 +1,38 @@
+# git files
+.git
+.gitignore
+
+# gradio files
+.gradio/
+
+# PyCharm files
+.idea/
+
+# macOS dir files
+.DS_Store
+
+# VS Code configuration dir
+.vscode/
+
+# Jupyter Notebook cache files
+.ipynb_checkpoints/
+*.ipynb
+
+# Python cache files
+__pycache__/
+
+# folders
+/venv/
+/results/
+/results01/
+/error/
+/error01/
+/wheels/win/
+/deploy/
+/deploy01/
+/reconstructed/
+/logs/
+/logs01/
+
+# data files
+*.bat
