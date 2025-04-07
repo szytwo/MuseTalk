@@ -1,36 +1,20 @@
 import os
-import threading
-import torch
 import time
-import requests
+
 import gdown
+import requests
+import torch
 from huggingface_hub import snapshot_download
 from mmpose.apis import init_model
-from musetalk.utils.face_detection import FaceAlignment, LandmarksType
+
 from custom.file_utils import logging, print_directory_contents
+from musetalk.utils.face_detection import FaceAlignment, LandmarksType
+
 
 class ModelManager:
-    _instance = None
-    _lock = threading.Lock()
-
-    def __new__(cls, *args, **kwargs):
-        if not cls._instance:
-            with cls._lock:
-                if not cls._instance:
-                    cls._instance = super().__new__(cls)
-                    cls._instance._initialized = False
-        return cls._instance
-
+    # noinspection PyTypeChecker
     def __init__(self):
-        if self._initialized:
-            return
-        if os.getenv("LOADING_IN_PROGRESS", "0") == "1":
-            # 避免多进程环境中重新加载
-            return
-
-        print("Initialize the mmpose model")
-        
-        os.environ["LOADING_IN_PROGRESS"] = "1"
+        logging.info("Initialize the mmpose model")
 
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         # Initialize the mmpose model
@@ -43,13 +27,18 @@ class ModelManager:
         device_str = "cuda" if torch.cuda.is_available() else "cpu"
         self.face_alignment_model = FaceAlignment(LandmarksType._2D, flip_input=False, device=device_str)
 
-        self._initialized = True
-
     def get_mmpose_model(self):
         return self.mmpose_model
 
     def get_face_alignment_model(self):
         return self.face_alignment_model
+
+    def release(self):
+        """Manually release GPU memory."""
+        del self.mmpose_model
+        del self.face_alignment_model
+        torch.cuda.empty_cache()
+        logging.info("Released models from GPU memory.")
 
     @staticmethod
     def download_model():
@@ -69,19 +58,19 @@ class ModelManager:
             os.makedirs(f"{checkpoints_dir}/sd-vae-ft-mse/")
             snapshot_download(
                 repo_id="stabilityai/sd-vae-ft-mse",
-                local_dir=checkpoints_dir+'/sd-vae-ft-mse',
+                local_dir=checkpoints_dir + '/sd-vae-ft-mse',
                 max_workers=8,
                 local_dir_use_symlinks=True,
             )
-            #dwpose
+            # dwpose
             os.makedirs(f"{checkpoints_dir}/dwpose/")
             snapshot_download(
                 repo_id="yzd-v/DWPose",
-                local_dir=checkpoints_dir+'/dwpose',
+                local_dir=checkpoints_dir + '/dwpose',
                 max_workers=8,
                 local_dir_use_symlinks=True,
             )
-            #vae
+            # vae
             url = "https://openaipublic.azureedge.net/main/whisper/models/65147644a518d12f04e32d6f3b26facc3f8dd46e5390956a9424a650c0ce22b9/tiny.pt"
             response = requests.get(url)
             # 确保请求成功
@@ -94,12 +83,12 @@ class ModelManager:
                     f.write(response.content)
             else:
                 logging.info(f"请求失败，状态码：{response.status_code}")
-            #gdown face parse
+            # gdown face parse
             url = "https://drive.google.com/uc?id=154JgKpzCPW82qINcVieuPH3fZ2e0P812"
             os.makedirs(f"{checkpoints_dir}/face-parse-bisent/")
             file_path = f"{checkpoints_dir}/face-parse-bisent/79999_iter.pth"
             gdown.download(url, file_path, quiet=False)
-            #resnet
+            # resnet
             url = "https://download.pytorch.org/models/resnet18-5c106cde.pth"
             response = requests.get(url)
             # 确保请求成功
@@ -114,7 +103,7 @@ class ModelManager:
 
             toc = time.time()
 
-            logging.info(f"download cost {toc-tic} seconds")
+            logging.info(f"download cost {toc - tic} seconds")
             print_directory_contents(checkpoints_dir)
         else:
             logging.info("Already download the model.")

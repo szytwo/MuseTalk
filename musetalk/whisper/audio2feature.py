@@ -14,6 +14,7 @@ class Audio2Feature():
         self.whisper_model_type = whisper_model_type
         self.model = load_model(model_path)  #
 
+    # noinspection PyTypeChecker
     def get_sliced_feature(self,
                            feature_array,
                            vid_idx,
@@ -46,6 +47,7 @@ class Audio2Feature():
         selected_feature = selected_feature.reshape(-1, 384)  # 50*384
         return selected_feature, selected_idx
 
+    # noinspection PyTypeChecker
     def get_sliced_feature_sparse(self, feature_array, vid_idx, audio_feat_length=[2, 2], fps=25):
         """
         Get sliced features based on a given index
@@ -80,6 +82,7 @@ class Audio2Feature():
         selected_feature = selected_feature.reshape(-1, 384)  # 50*384
         return selected_feature, selected_idx
 
+    # noinspection PyTypeChecker
     def feature2chunks(self, feature_array, fps, audio_feat_length=[2, 2]):
         whisper_chunks = []
         # 修改点3：根据总特征数计算视频帧总数
@@ -100,6 +103,7 @@ class Audio2Feature():
 
         return whisper_chunks
 
+    # noinspection PyTypeChecker
     def audio2feat(self, audio_path):
         # get the sample rate of the audio
         result = self.model.transcribe(audio_path)

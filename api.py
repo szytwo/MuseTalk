@@ -21,6 +21,7 @@ from custom.Preprocessing import Preprocessing
 from custom.TextProcessor import TextProcessor
 from custom.file_utils import logging, delete_old_files_and_folders, get_filename_noext
 from custom.image_utils import read_imgs_parallel
+from custom.parallel_method import video_to_img_parallel, frames_in_parallel, write_video, get_video_metadata
 from musetalk.utils.utils import load_all_model, get_file_type, get_video_fps, datagen
 
 result_input_dir = './results/input'
@@ -36,6 +37,12 @@ def inference(
         fps: int = 25,
         max_duration: int = 20
 ):
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    timesteps = torch.tensor([0], device=device)
+
+    audio_processor, vae, unet, pe = load_all_model()
+    preprocessing = Preprocessing()
+
     os.makedirs(result_output_dir, exist_ok=True)
     # 获取 CPU 核心数
     max_workers = os.cpu_count() / 2
@@ -298,6 +305,7 @@ def inference_with_timeout(
 origins = ["*"]  # "*"，即为所有。
 
 app = FastAPI(docs_url=None)
+# noinspection PyTypeChecker
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,  # 设置允许的origins来源
@@ -470,14 +478,6 @@ if __name__ == "__main__":
         delete_old_files_and_folders(result_output_dir, 0)
 
         ModelManager.download_model()  # for huggingface deployment.
-
-        from custom.parallel_method import video_to_img_parallel, frames_in_parallel, write_video, get_video_metadata
-
-        audio_processor, vae, unet, pe = load_all_model()
-        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        timesteps = torch.tensor([0], device=device)
-
-        preprocessing = Preprocessing()
 
         if args.api:
             uvicorn.run(app=app, host="0.0.0.0", port=args.port, workers=1)

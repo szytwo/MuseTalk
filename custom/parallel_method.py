@@ -8,7 +8,7 @@ from moviepy.editor import *
 from pydub.utils import mediainfo
 from tqdm import tqdm
 
-from custom.Blending import get_image
+from custom.Blending import Blending
 from custom.TextProcessor import TextProcessor
 from custom.file_utils import logging, add_suffix_to_filename
 
@@ -131,6 +131,7 @@ def video_to_img_parallel(
     return None, None
 
 
+# noinspection PyTypeChecker
 def save_frame(i, combine_frame, result_img_save_path):
     # 保存图片
     output_path = f"{result_img_save_path}/{str(i).zfill(8)}.png"
@@ -142,6 +143,7 @@ def save_frame(i, combine_frame, result_img_save_path):
 
 def frames_in_parallel(res_frame_list, coord_list_cycle, frame_list_cycle, result_img_save_path, max_workers=8):
     logging.info("正在将语音图像转换为原始视频图像...")
+    blending = Blending()
 
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
         futures = []
@@ -155,7 +157,7 @@ def frames_in_parallel(res_frame_list, coord_list_cycle, frame_list_cycle, resul
             if width > 0 and height > 0:
                 try:
                     res_frame = cv2.resize(res_frame.astype(np.uint8), (width, height))
-                    combine_frame = get_image(ori_frame, res_frame, bbox)
+                    combine_frame = blending.get_image(ori_frame, res_frame, bbox)
                 except Exception as e:
                     logging.info(f"处理帧 {i} 时出错: {e}")
                     combine_frame = ori_frame  # 出错时采用原图

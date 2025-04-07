@@ -1,13 +1,15 @@
-import numpy as np
-import torch
 import gc
 
+import numpy as np
+import torch
 from mmpose.apis import inference_topdown
 from mmpose.structures import merge_data_samples
 from tqdm import tqdm
+
+from custom.ModelManager import ModelManager
 from custom.file_utils import logging
 from custom.image_utils import read_imgs_parallel
-from custom.ModelManager import ModelManager
+
 
 # initialize the mmpose model
 # device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -25,7 +27,7 @@ class Preprocessing:
         model_manager = ModelManager()
         self.model = model_manager.get_mmpose_model()
         self.fa = model_manager.get_face_alignment_model()
-        self.coord_placeholder = (0.0,0.0,0.0,0.0) # 坐标占位符
+        self.coord_placeholder = (0.0, 0.0, 0.0, 0.0)  # 坐标占位符
 
     # maker if the bbox is not sufficient 
     # 定义一个函数进行显存清理
@@ -58,7 +60,8 @@ class Preprocessing:
         landmark_resized = landmark_norm * [new_w, new_h]
         return landmark_resized
 
-    def get_landmark_and_bbox(self, img_list, upperbondrange = 0, batch_size_fa = 1):
+    # noinspection PyTypeChecker
+    def get_landmark_and_bbox(self, img_list, upperbondrange=0, batch_size_fa=1):
         frames = read_imgs_parallel(img_list)
         batches = [frames[i:i + batch_size_fa] for i in range(0, len(frames), batch_size_fa)]
         coords_list = []
@@ -74,37 +77,38 @@ class Preprocessing:
             results = inference_topdown(self.model, np.asarray(fb)[0])
             results = merge_data_samples(results)
             keypoints = results.pred_instances.keypoints
-            face_land_mark= keypoints[0][23:91]
+            face_land_mark = keypoints[0][23:91]
             face_land_mark = face_land_mark.astype(np.int32)
-            
+
             # get bounding boxes by face detetion
             bbox = self.fa.get_detections_for_batch(np.asarray(fb))
-            
+
             # adjust the bounding box refer to landmark
             # Add the bounding box to a tuple and append it to the coordinates list
             for j, f in enumerate(bbox):
-                if f is None: # no face in the image
-                    coords_list += [self.coord_placeholder] # 如果无脸型，添加占位符
+                if f is None:  # no face in the image
+                    coords_list += [self.coord_placeholder]  # 如果无脸型，添加占位符
                     continue
-                
-                half_face_coord =  face_land_mark[29] #np.mean([face_land_mark[28], face_land_mark[29]], axis=0)
-                range_minus = (face_land_mark[30]- face_land_mark[29])[1]
-                range_plus = (face_land_mark[29]- face_land_mark[28])[1]
+
+                half_face_coord = face_land_mark[29]  # np.mean([face_land_mark[28], face_land_mark[29]], axis=0)
+                range_minus = (face_land_mark[30] - face_land_mark[29])[1]
+                range_plus = (face_land_mark[29] - face_land_mark[28])[1]
                 average_range_minus.append(range_minus)
                 average_range_plus.append(range_plus)
 
                 if upperbondrange != 0:
-                    half_face_coord[1] = upperbondrange + half_face_coord[1] #手动调整  + 向下（偏29）  - 向上（偏28）
+                    half_face_coord[1] = upperbondrange + half_face_coord[1]  # 手动调整  + 向下（偏29）  - 向上（偏28）
 
                 half_face_dist = np.max(face_land_mark[:, 1]) - half_face_coord[1]
                 upper_bond = half_face_coord[1] - half_face_dist
-                
-                f_landmark = (np.min(face_land_mark[:, 0]), int(upper_bond), np.max(face_land_mark[:, 0]), np.max(face_land_mark[:, 1]))
+
+                f_landmark = (np.min(face_land_mark[:, 0]), int(upper_bond), np.max(face_land_mark[:, 0]),
+                              np.max(face_land_mark[:, 1]))
                 x1, y1, x2, y2 = f_landmark
                 width, height = x2 - x1, y2 - y1
 
-                if width <= 0 or height <= 0 or x1 < 0 or y1 < 0: # if the landmark bbox is not suitable, reuse the bbox
-                    coords_list += [self.coord_placeholder] # 如果无脸型，添加占位符
+                if width <= 0 or height <= 0 or x1 < 0 or y1 < 0:  # if the landmark bbox is not suitable, reuse the bbox
+                    coords_list += [self.coord_placeholder]  # 如果无脸型，添加占位符
                     _x1, _y1, _x2, _y2 = f
                     _width, _height = _x2 - _x1, _y2 - _y1
 
@@ -113,10 +117,13 @@ class Preprocessing:
                     coords_list += [f_landmark]
 
         bbox_shift_text = f"Total frame:「{len(frames)}」 Manually adjust range : [ -{int(sum(average_range_minus) / len(average_range_minus))}~{int(sum(average_range_plus) / len(average_range_plus))} ] , the current value: {upperbondrange}"
-        bbox_range = [-int(sum(average_range_minus) / len(average_range_minus)),int(sum(average_range_plus) / len(average_range_plus))]
+        bbox_range = [-int(sum(average_range_minus) / len(average_range_minus)),
+                      int(sum(average_range_plus) / len(average_range_plus))]
 
-        logging.info("*********************************bbox_shift parameter adjustment***********************************************")
+        logging.info(
+            "*********************************bbox_shift parameter adjustment***********************************************")
         logging.info(bbox_shift_text)
-        logging.info("***************************************************************************************************************")
-        
+        logging.info(
+            "***************************************************************************************************************")
+
         return coords_list, frames, bbox_shift_text, bbox_range
