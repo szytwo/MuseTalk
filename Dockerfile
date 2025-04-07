@@ -58,6 +58,7 @@ RUN pip install --upgrade pip -i https://pypi.tuna.tsinghua.edu.cn/simple \
     && mim install "mmcv==2.0.1" \
     && mim install "mmdet==3.1.0" \
     && mim install "mmpose==1.1.0" \
+    && pip install --no-cache-dir tqdm==4.66.5 -i https://pypi.tuna.tsinghua.edu.cn/simple \
     && rm -rf wheels
 
 # 暴露容器端口
