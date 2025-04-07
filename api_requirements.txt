@@ -23,4 +23,4 @@ moviepy
 
 langdetect
 func-timeout
-tqdm>=4.64.0
+tqdm>=4.66.5
