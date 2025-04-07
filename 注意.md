@@ -1,10 +1,11 @@
 ## 安装
+
 ```
 conda create --prefix ./venv python==3.10
 
 conda activate ./venv
 
-pip install -r ./api_requirements.txt -i https://mirrors.aliyun.com/pypi/simple 
+pip install -r ./api_requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple
 
 pip install --no-cache-dir -U openmim
 mim install mmengine
