@@ -1,0 +1,34 @@
+networks:
+  ai_network-01:
+    driver: bridge
+
+services:
+  cosyvoice-01:
+    image: cosyvoice:1.0
+    container_name: cosyvoice-01
+    restart: always
+    runtime: nvidia
+    privileged: true
+    volumes:
+      - d:/AI/CosyVoice/results01:/code/results
+      - d:/AI/CosyVoice/error01:/code/error
+      - d:/AI/CosyVoice/logs01:/code/logs
+    environment:
+      - TQDM_DISABLE=1 # 全局关闭进度条显示
+      - PYTHONUNBUFFERED=1 # 取消标准输出缓冲
+      - CUDA_VISIBLE_DEVICES=3
+      - ASR_URL=http://host.docker.internal:17868/api/v1/asr
+      - PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:1024
+    tty: true  # 分配伪终端
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              capabilities: [ gpu ]
+    shm_size: '16g'
+    ports:
+      - '19987:9987'
+    command: python /code/api.py --port 9987
+    networks:
+      - ai_network-01
