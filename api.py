@@ -2,6 +2,7 @@ import argparse
 import glob
 import pickle
 import shutil
+import time
 
 import cv2
 import numpy as np
@@ -261,9 +262,6 @@ def inference(
         raise FileNotFoundError(f"Input video file not found: {output_video}")
     # 删除文件夹
     shutil.rmtree(result_img_save_path)
-    # 删除过期文件
-    delete_old_files_and_folders(result_input_dir, 1)
-    delete_old_files_and_folders(result_output_dir, 1)
 
     logging.info(f"result is save to {output_video}")
     logging.info(f"bbox_shift_text: {bbox_shift_text}")
@@ -285,6 +283,8 @@ def inference_with_timeout(
     timeout_sec = 3600  # 超时时间
 
     try:
+        # 记录开始时间
+        start_time = time.time()
         output_video, bbox_shift_text, bbox_range = func_timeout(
             timeout_sec,
             inference,
@@ -296,9 +296,18 @@ def inference_with_timeout(
                 "max_duration": max_duration
             },
         )
+        # 计算耗时
+        elapsed = time.time() - start_time
+        logging.info(f"生成完成，用时: {elapsed}")
+        
         return output_video, bbox_shift_text, bbox_range
     except FunctionTimedOut:
         raise Exception(f"inference 执行超时 {timeout_sec}s")
+    finally:
+        # 删除过期文件
+        delete_old_files_and_folders(result_input_dir, 1)
+        delete_old_files_and_folders(result_output_dir, 1)
+        Preprocessing.clear_cuda_cache()
 
 
 # 设置允许访问的域名
@@ -360,7 +369,13 @@ async def do(
     absolute_path = None
 
     try:
-        output_video, bbox_shift_text, bbox_range = inference_with_timeout(audio, video, bbox, fps, max_duration)
+        output_video, bbox_shift_text, bbox_range = inference_with_timeout(
+            audio_path=audio,
+            video_path=video,
+            bbox_shift=bbox,
+            fps=fps,
+            max_duration=max_duration
+        )
 
         relative_path = output_video
         absolute_path = os.path.abspath(relative_path)
@@ -370,8 +385,6 @@ async def do(
         # 记录错误信息
         TextProcessor.log_error(ex)
         logging.error(ex)
-    finally:
-        Preprocessing.clear_cuda_cache()
 
     return PlainTextResponse(absolute_path)
 
@@ -402,9 +415,13 @@ async def do(
 
         logging.info(f"开始执行inference")
 
-        (output_video,
-         bbox_shift_text,
-         bbox_range) = inference_with_timeout(audio_path, video_path, bbox, fps, max_duration)
+        output_video, bbox_shift_text, bbox_range = inference_with_timeout(
+            audio_path=audio_path,
+            video_path=video_path,
+            bbox_shift=bbox,
+            fps=fps,
+            max_duration=max_duration
+        )
 
         relative_path = output_video
 
@@ -413,8 +430,6 @@ async def do(
         # 记录错误信息
         TextProcessor.log_error(ex)
         logging.error(ex)
-    finally:
-        Preprocessing.clear_cuda_cache()
 
     return JSONResponse(json)
 
@@ -427,8 +442,12 @@ async def download(name: str):
 
 def inference_app():
     try:
-        output_video, bbox_shift_text, bbox_range = inference_with_timeout(args.audio, args.video, args.bbox_shift,
-                                                                           args.fps)
+        output_video, bbox_shift_text, bbox_range = inference_with_timeout(
+            audio_path=args.audio,
+            video_path=args.video,
+            bbox_shift=args.bbox_shift,
+            fps=args.fps
+        )
         sname, sext = os.path.splitext(args.output)
 
         with open(f'{sname}.txt', 'w') as file:
@@ -437,8 +456,6 @@ def inference_app():
         # 记录错误信息
         TextProcessor.log_error(ex)
         logging.error(ex)
-    finally:
-        Preprocessing.clear_cuda_cache()
 
 
 if __name__ == "__main__":
