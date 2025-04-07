@@ -10,9 +10,14 @@ data/audio/*.wav
 data/video/*.mp4
 *.whl
 
-MFA/
-error/
-venv/
-example/
+/error/
+/error01/
+/results/
+/results01/
+/logs/
+/logs01/
+/venv/
+/example/
+/wheels/
 
 go-api-conda.bat
